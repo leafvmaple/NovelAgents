@@ -1,6 +1,7 @@
 import { Codex } from "@openai/codex-sdk";
 import type { CompletionRequest, ModelProvider } from "./provider.js";
 import { codexBackendPrompt } from "./prompts/codex-backend.js";
+import { ProviderError } from "./errors/provider-error.js";
 
 type CodexProviderOptions = {
   model: string;
@@ -51,7 +52,7 @@ export class CodexProvider implements ModelProvider {
         ...(request.outputSchema ? { outputSchema: request.outputSchema } : {}),
       });
       const content = turn.finalResponse.trim();
-      if (!content) throw new Error("CODEX_RESPONSE_EMPTY");
+      if (!content) throw new ProviderError(this.name, "EMPTY_RESPONSE", true);
       const inputTokens = turn.usage?.input_tokens ?? null;
       const outputTokens = turn.usage?.output_tokens ?? null;
       const reasoningTokens = turn.usage?.reasoning_output_tokens ?? 0;
@@ -68,9 +69,11 @@ export class CodexProvider implements ModelProvider {
         },
       };
     } catch (error) {
-      if (controller.signal.aborted) throw new Error("CODEX_REQUEST_TIMEOUT");
+      if (error instanceof ProviderError) throw error;
+      if (controller.signal.aborted) throw new ProviderError(this.name, "TIMEOUT", true, null, "request timed out", { cause: error });
       const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`CODEX_REQUEST_FAILED:${message}`);
+      const retryable = /(?:429|5\d\d|temporar|overload|unavailable|connection|reset)/iu.test(message);
+      throw new ProviderError(this.name, "SDK_ERROR", retryable, null, message, { cause: error });
     } finally {
       clearTimeout(timeout);
     }

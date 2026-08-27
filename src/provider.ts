@@ -1,4 +1,5 @@
 import type { ChatMessage, ModelResult } from "./domain.js";
+import { ProviderError } from "./errors/provider-error.js";
 
 export type CompletionRequest = {
   purpose: string;
@@ -71,17 +72,39 @@ export class OpenRouterProvider implements ModelProvider {
           }),
         },
       );
-      const payload = (await response.json()) as OpenRouterResponse;
+      const rawBody = await response.text();
+      let payload: OpenRouterResponse;
+      try {
+        payload = JSON.parse(rawBody) as OpenRouterResponse;
+      } catch (error) {
+        if (!response.ok) {
+          throw new ProviderError(
+            this.name,
+            "HTTP_ERROR",
+            [408, 429, 500, 502, 503, 504].includes(response.status),
+            response.status,
+            rawBody.trim().slice(0, 300) || response.statusText,
+            { cause: error },
+          );
+        }
+        throw new ProviderError(this.name, "INVALID_RESPONSE", true, response.status, "response is not JSON", { cause: error });
+      }
       if (!response.ok) {
         const message =
           typeof payload.error?.message === "string"
             ? payload.error.message
             : `HTTP ${response.status}`;
-        throw new Error(`OPENROUTER_REQUEST_FAILED:${response.status}:${message}`);
+        throw new ProviderError(
+          this.name,
+          "HTTP_ERROR",
+          [408, 429, 500, 502, 503, 504].includes(response.status),
+          response.status,
+          message,
+        );
       }
       const content = payload.choices?.[0]?.message?.content;
       if (typeof content !== "string" || !content.trim()) {
-        throw new Error("OPENROUTER_RESPONSE_EMPTY");
+        throw new ProviderError(this.name, "EMPTY_RESPONSE", true, response.status);
       }
       return {
         content: content.trim(),
@@ -93,6 +116,12 @@ export class OpenRouterProvider implements ModelProvider {
           totalTokens: tokenCount(payload.usage?.total_tokens),
         },
       };
+    } catch (error) {
+      if (error instanceof ProviderError) throw error;
+      if (controller.signal.aborted) {
+        throw new ProviderError(this.name, "TIMEOUT", true, null, "request timed out", { cause: error });
+      }
+      throw new ProviderError(this.name, "NETWORK_ERROR", true, null, error instanceof Error ? error.message : String(error), { cause: error });
     } finally {
       clearTimeout(timeout);
     }

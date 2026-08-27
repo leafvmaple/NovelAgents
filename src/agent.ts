@@ -15,6 +15,7 @@ import {
 } from "./domain.js";
 import { parseModelJson } from "./json.js";
 import { AppError } from "./errors/app-error.js";
+import { ProviderError } from "./errors/provider-error.js";
 import { translate, type UiLocale } from "./i18n/index.js";
 import { createOpenAiOutputSchema } from "./json-schema.js";
 import type { CompletionRequest, ModelProvider } from "./provider.js";
@@ -44,10 +45,7 @@ type NovelAgentOptions = {
 };
 
 function isRetryableProviderError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /OPENROUTER_RESPONSE_EMPTY|OPENROUTER_REQUEST_FAILED:(408|429|500|502|503|504):|CODEX_REQUEST_TIMEOUT|CODEX_REQUEST_FAILED:.*(?:429|5\d\d|temporar|overload|CODEX_RESPONSE_EMPTY)|fetch failed|aborted/iu.test(
-    message,
-  );
+  return error instanceof ProviderError && error.retryable;
 }
 
 export function normalizeReview(review: ChapterReview) {
@@ -134,6 +132,9 @@ export class NovelAgent {
             retrying,
             durationMs: Date.now() - started,
             message: error instanceof Error ? error.message : String(error),
+            ...(error instanceof ProviderError
+              ? { providerError: { provider: error.provider, code: error.code, status: error.status } }
+              : {}),
           },
         });
         if (!retrying) throw error;
