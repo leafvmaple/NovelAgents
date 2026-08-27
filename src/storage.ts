@@ -60,9 +60,10 @@ export class NovelStore {
   }
 
   async writeNovel(state: NovelState) {
-    const title = state.blueprint?.title ?? state.spec?.workingTitle ?? "未命名小说";
+    const chinese = state.spec?.language.toLowerCase().startsWith("zh") ?? true;
+    const title = state.blueprint?.title ?? state.spec?.workingTitle ?? (chinese ? "未命名小说" : "Untitled Novel");
     const chapters = state.chapters
-      .map((chapter) => `## 第${chapter.number}章 ${chapter.title}\n\n${chapter.content}`)
+      .map((chapter) => `${chinese ? `## 第${chapter.number}章` : `## Chapter ${chapter.number}`} ${chapter.title}\n\n${chapter.content}`)
       .join("\n\n---\n\n");
     await writeFile(this.novelPath, `# ${title}\n\n${chapters}\n`, "utf8");
   }

@@ -17,7 +17,13 @@ const originalityRules = [
   "不得把真实作家写成作者或在正文中声称作品出自该作家。",
 ].join("\n");
 
-export function analyzeRequestMessages(userRequest: string) {
+export function analyzeRequestMessages(
+  userRequest: string,
+  options: { promptLocale: "zh-CN" | "en-US"; outputLanguage: string } = {
+    promptLocale: "zh-CN",
+    outputLanguage: "zh-CN",
+  },
+) {
   return [
     {
       role: "system" as const,
@@ -28,6 +34,7 @@ export function analyzeRequestMessages(userRequest: string) {
         "第一版最多规划 8 章。用户未指定时使用 3 章，每章约 1200 个中文字符。",
         "pointOfView 只能是 first_person、third_person_limited 或 third_person_omniscient。",
         "language 为 zh-CN 时，所有内容字段必须使用自然中文，不得混入未翻译的英文策划术语。",
+        `Prompt 指令语言：${options.promptLocale}；小说输出语言必须设置为：${options.outputLanguage}。`,
         jsonOnly,
         "JSON 字段：workingTitle, genre, premise, audience, tone, pointOfView, language, chapterCount, targetWordsPerChapter, mustInclude, mustAvoid。",
       ].join("\n"),

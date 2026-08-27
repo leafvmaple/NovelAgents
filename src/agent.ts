@@ -12,6 +12,8 @@ import {
   type NovelState,
 } from "./domain.js";
 import { parseModelJson } from "./json.js";
+import { AppError } from "./errors/app-error.js";
+import { translate, type UiLocale } from "./i18n/index.js";
 import { createOpenAiOutputSchema } from "./json-schema.js";
 import type { CompletionRequest, ModelProvider } from "./provider.js";
 import {
@@ -23,6 +25,7 @@ import {
   reviseChapterMessages,
 } from "./prompts.js";
 import { NovelStore } from "./storage.js";
+import { repairJsonMessages } from "./prompts/repair-json.js";
 
 export type AgentObserver = (message: string) => void;
 
@@ -30,6 +33,9 @@ type NovelAgentOptions = {
   outputRoot: string;
   maxRevisions: number;
   maxProviderRetries: number;
+  uiLocale: UiLocale;
+  promptLocale: UiLocale;
+  outputLanguage: string;
 };
 
 function isRetryableProviderError(error: unknown) {
@@ -53,22 +59,22 @@ export function normalizeReview(review: ChapterReview) {
   });
 }
 
-function localChapterReview(content: string, spec: NovelSpec): ChapterReview | null {
+function localChapterReview(content: string, spec: NovelSpec, locale: UiLocale): ChapterReview | null {
   const issues: ChapterReview["issues"] = [];
   const minimumLength = Math.max(250, Math.floor(spec.targetWordsPerChapter * 0.5));
   if (content.trim().length < minimumLength) {
     issues.push({
       severity: "blocking",
-      problem: `正文只有 ${content.trim().length} 个字符，低于最低完整章节长度 ${minimumLength}。`,
-      suggestion: `重写为至少 ${minimumLength} 个字符的完整场景正文，不能输出提纲、拒绝说明或摘要。`,
+      problem: translate(locale, "review.tooShortProblem", { actual: content.trim().length, minimum: minimumLength }),
+      suggestion: translate(locale, "review.tooShortSuggestion", { minimum: minimumLength }),
     });
   }
   const englishTokens = content.match(/\b[A-Za-z]{3,}\b/gu) ?? [];
   if (spec.language.toLowerCase().startsWith("zh") && englishTokens.length >= 3) {
     issues.push({
       severity: "major",
-      problem: `中文正文混入了未本地化的英文表达：${englishTokens.slice(0, 6).join(", ")}。`,
-      suggestion: "将非必要英文表达改写为自然中文；用户明确要求保留的专有名词除外。",
+      problem: translate(locale, "review.foreignWordsProblem", { words: englishTokens.slice(0, 6).join(", ") }),
+      suggestion: translate(locale, "review.foreignWordsSuggestion"),
     });
   }
   if (issues.length === 0) return null;
@@ -126,10 +132,10 @@ export class NovelAgent {
           },
         });
         if (!retrying) throw error;
-        this.observe(`${purpose} 遇到 Provider 瞬时失败，正在进行第 ${attempt + 1} 次重试……`);
+        this.observe(translate(this.options.uiLocale, "agent.providerRetry", { purpose, attempt: attempt + 1 }));
       }
     }
-    throw new Error("PROVIDER_RETRY_EXHAUSTED");
+    throw new AppError("PROVIDER_RETRY_EXHAUSTED");
   }
 
   private async callJson<S extends z.ZodTypeAny>(
@@ -156,7 +162,7 @@ export class NovelAgent {
               message: issue.message,
             }))
           : [{ path: "response", expected: "valid JSON", message: String(error) }];
-      this.observe(`${purpose} 的结构化结果不符合契约，正在自动修复一次……`);
+      this.observe(translate(this.options.uiLocale, "agent.repairingJson", { purpose }));
       await store?.trace({
         type: "error",
         stage: `${purpose}-validation`,
@@ -165,26 +171,7 @@ export class NovelAgent {
       const repaired = await this.call(
         store,
         `${purpose}-repair`,
-        [
-          {
-            role: "system",
-            content: [
-              "你是严格的 JSON 数据修复器。",
-              "根据校验错误修正给定 JSON，只修复结构、字段类型和缺失字段，不改变故事含义。",
-              "字符串需要变为数组时，将其中并列的语义拆成多个字符串元素。",
-              "输出必须是原任务要求的目标对象本身，禁止添加 response、data、result、output 等包装字段。",
-              "只输出一个合法 JSON 对象，不要 Markdown，不要解释。",
-            ].join("\n"),
-          },
-          {
-            role: "user",
-            content: JSON.stringify({
-              originalTaskMessages: messages,
-              validationErrors,
-              originalJson: content,
-            }),
-          },
-        ],
+        repairJsonMessages({ originalTaskMessages: messages, validationErrors, originalJson: content }),
         { json: true, temperature: 0, maxTokens: options.maxTokens, outputSchema },
       );
       return parseModelJson(schema, repaired);
@@ -217,11 +204,14 @@ export class NovelAgent {
       updatedAt: now,
     });
 
-    this.observe("需求分析 Agent 正在整理小说规格……");
+    this.observe(translate(this.options.uiLocale, "agent.analyzingRequest"));
     const spec = await this.callJson(
       null,
       "analyze-request",
-      analyzeRequestMessages(userRequest),
+      analyzeRequestMessages(userRequest, {
+        promptLocale: this.options.promptLocale,
+        outputLanguage: this.options.outputLanguage,
+      }),
       NovelSpecSchema,
       { temperature: 0.25, maxTokens: 1600 },
     );
@@ -233,7 +223,7 @@ export class NovelAgent {
       data: { provider: this.provider.name, recoveredBeforeStoreCreation: true, response: spec },
     });
 
-    this.observe("策划 Agent 正在建立故事圣经和逐章大纲……");
+    this.observe(translate(this.options.uiLocale, "agent.creatingBlueprint"));
     const blueprint = await this.callJson(
       store,
       "create-blueprint",
@@ -242,12 +232,12 @@ export class NovelAgent {
       { temperature: 0.55, maxTokens: 4000 },
     );
     if (blueprint.chapters.length !== spec.chapterCount) {
-      throw new Error("BLUEPRINT_CHAPTER_COUNT_MISMATCH");
+      throw new AppError("BLUEPRINT_CHAPTER_COUNT_MISMATCH");
     }
     const characterIds = new Set(blueprint.characters.map((character) => character.id));
     for (const chapter of blueprint.chapters) {
       if (!characterIds.has(chapter.povCharacterId)) {
-        throw new Error(`BLUEPRINT_POV_CHARACTER_MISSING:${chapter.povCharacterId}`);
+        throw new AppError("BLUEPRINT_POV_CHARACTER_MISSING", { characterId: chapter.povCharacterId });
       }
     }
     state = NovelStateSchema.parse({
@@ -263,7 +253,7 @@ export class NovelAgent {
 
   async execute(initialState: NovelState, store: NovelStore) {
     if (!initialState.spec || !initialState.blueprint) {
-      throw new Error("NOVEL_PLAN_REQUIRED");
+      throw new AppError("NOVEL_PLAN_REQUIRED");
     }
     const spec = initialState.spec;
     const blueprint = initialState.blueprint;
@@ -272,10 +262,10 @@ export class NovelAgent {
     try {
       for (const chapterPlan of blueprint.chapters) {
         if (state.chapters.some((chapter) => chapter.number === chapterPlan.number)) {
-          this.observe(`第 ${chapterPlan.number} 章已有持久化结果，从下一章继续。`);
+          this.observe(translate(this.options.uiLocale, "agent.chapterAlreadySaved", { chapter: chapterPlan.number }));
           continue;
         }
-        this.observe(`写作 Agent 正在创作第 ${chapterPlan.number}/${blueprint.chapters.length} 章《${chapterPlan.title}》……`);
+        this.observe(translate(this.options.uiLocale, "agent.draftingChapter", { chapter: chapterPlan.number, total: blueprint.chapters.length, title: chapterPlan.title }));
         let content = await this.call(
           store,
           `draft-chapter-${chapterPlan.number}`,
@@ -283,7 +273,7 @@ export class NovelAgent {
           { json: false, temperature: 0.82, maxTokens: Math.min(8000, spec.targetWordsPerChapter * 2) },
         );
         let revisionCount = 0;
-        let review = localChapterReview(content, spec);
+        let review = localChapterReview(content, spec, this.options.uiLocale);
         if (!review) {
           review = normalizeReview(
             await this.callJson(
@@ -304,7 +294,7 @@ export class NovelAgent {
 
         while (!review.approved && revisionCount < this.options.maxRevisions) {
           revisionCount += 1;
-          this.observe(`审稿 Agent 要求修改第 ${chapterPlan.number} 章，执行第 ${revisionCount} 次改稿……`);
+          this.observe(translate(this.options.uiLocale, "agent.revisingChapter", { chapter: chapterPlan.number, revision: revisionCount }));
           content = await this.call(
             store,
             `revise-chapter-${chapterPlan.number}`,
@@ -318,7 +308,7 @@ export class NovelAgent {
             }),
             { json: false, temperature: 0.65, maxTokens: Math.min(8000, spec.targetWordsPerChapter * 2) },
           );
-          review = localChapterReview(content, spec);
+          review = localChapterReview(content, spec, this.options.uiLocale);
           if (!review) {
             review = normalizeReview(
               await this.callJson(
@@ -344,10 +334,10 @@ export class NovelAgent {
             stage: `chapter-${chapterPlan.number}-rejected`,
             data: { review, revisionCount },
           });
-          throw new Error(`CHAPTER_REVIEW_REJECTED:${chapterPlan.number}`);
+          throw new AppError("CHAPTER_REVIEW_REJECTED", { chapter: chapterPlan.number });
         }
 
-        this.observe(`连续性 Agent 正在记录第 ${chapterPlan.number} 章状态……`);
+        this.observe(translate(this.options.uiLocale, "agent.recordingMemory", { chapter: chapterPlan.number }));
         const memory = await this.callJson(
           store,
           `memory-chapter-${chapterPlan.number}`,

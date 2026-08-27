@@ -2,6 +2,8 @@ import "dotenv/config";
 import { resolve } from "node:path";
 import { z } from "zod";
 import { CodexProvider } from "./codex-provider.js";
+import { AppError } from "./errors/app-error.js";
+import { locales } from "./i18n/index.js";
 import { MockProvider, OpenRouterProvider, type ModelProvider } from "./provider.js";
 
 const ConfigSchema = z
@@ -15,6 +17,9 @@ const ConfigSchema = z
     maxRevisions: z.number().int().min(0).max(3),
     maxProviderRetries: z.number().int().min(0).max(3),
     outputRoot: z.string().trim().min(1),
+    uiLocale: z.enum(locales),
+    promptLocale: z.enum(locales),
+    outputLanguage: z.string().trim().min(1),
   })
   .strict();
 
@@ -29,6 +34,9 @@ export function loadConfig(forceMock = false) {
     maxRevisions: Number(process.env.NOVEL_AGENT_MAX_REVISIONS ?? 1),
     maxProviderRetries: Number(process.env.NOVEL_AGENT_MAX_PROVIDER_RETRIES ?? 1),
     outputRoot: resolve(process.cwd(), process.env.NOVEL_AGENT_OUTPUT_DIR ?? "outputs"),
+    uiLocale: process.env.NOVEL_AGENT_UI_LOCALE ?? "zh-CN",
+    promptLocale: process.env.NOVEL_AGENT_PROMPT_LOCALE ?? "zh-CN",
+    outputLanguage: process.env.NOVEL_AGENT_OUTPUT_LANGUAGE ?? "zh-CN",
   });
 }
 
@@ -43,7 +51,7 @@ export function createProvider(config: ReturnType<typeof loadConfig>): ModelProv
   if (config.provider === "mock" || (config.provider === "auto" && !config.apiKey)) {
     return new MockProvider();
   }
-  if (!config.apiKey) throw new Error("OPENROUTER_API_KEY_REQUIRED");
+  if (!config.apiKey) throw new AppError("OPENROUTER_API_KEY_REQUIRED");
   return new OpenRouterProvider({
     apiKey: config.apiKey,
     baseUrl: config.baseUrl,

@@ -2,6 +2,8 @@ import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { NovelAgent } from "./agent.js";
 import { createProvider, loadConfig } from "./config.js";
+import { AppError } from "./errors/app-error.js";
+import { formatError, translate, type UiLocale } from "./i18n/index.js";
 import { NovelStore } from "./storage.js";
 
 const demoRequest =
@@ -12,16 +14,17 @@ function argumentValue(name: string) {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
-function printPlan(state: Awaited<ReturnType<NovelAgent["prepare"]>>["state"]) {
+function printPlan(state: Awaited<ReturnType<NovelAgent["prepare"]>>["state"], locale: UiLocale) {
   if (!state.spec || !state.blueprint) return;
-  console.log("\n=== 小说规格 ===");
-  console.log(`书名：${state.blueprint.title}`);
-  console.log(`类型：${state.spec.genre}`);
-  console.log(`基调：${state.spec.tone}`);
-  console.log(`视角：${state.spec.pointOfView}`);
-  console.log(`章节：${state.spec.chapterCount} 章，每章约 ${state.spec.targetWordsPerChapter} 字`);
-  console.log(`一句话：${state.blueprint.logline}`);
-  console.log("\n=== 章节计划 ===");
+  const t = (key: Parameters<typeof translate>[1], params: Record<string, unknown> = {}) => translate(locale, key, params);
+  console.log(`\n=== ${t("cli.specHeading")} ===`);
+  console.log(t("cli.title", { value: state.blueprint.title }));
+  console.log(t("cli.genre", { value: state.spec.genre }));
+  console.log(t("cli.tone", { value: state.spec.tone }));
+  console.log(t("cli.pov", { value: state.spec.pointOfView }));
+  console.log(t("cli.chapters", { count: state.spec.chapterCount, words: state.spec.targetWordsPerChapter }));
+  console.log(t("cli.logline", { value: state.blueprint.logline }));
+  console.log(`\n=== ${t("cli.planHeading")} ===`);
   for (const chapter of state.blueprint.chapters) {
     console.log(`${chapter.number}. ${chapter.title} —— ${chapter.purpose}`);
   }
@@ -31,13 +34,14 @@ async function main() {
   const demo = process.argv.includes("--demo");
   const yes = process.argv.includes("--yes");
   const config = loadConfig(demo);
+  const t = (key: Parameters<typeof translate>[1], params: Record<string, unknown> = {}) => translate(config.uiLocale, key, params);
   const provider = createProvider(config);
   const cli = createInterface({ input, output });
 
   try {
     console.log(`\nProvider: ${provider.name}`);
     if (provider.name === "mock" && !demo) {
-      console.log("未检测到 OPENROUTER_API_KEY，当前使用离线演示 Provider。复制 .env.example 为 .env 并填写 Key 可调用真实免费模型。\n");
+      console.log(`${t("cli.mockNotice")}\n`);
     }
 
     const agent = new NovelAgent(
@@ -46,6 +50,9 @@ async function main() {
         outputRoot: config.outputRoot,
         maxRevisions: config.maxRevisions,
         maxProviderRetries: config.maxProviderRetries,
+        uiLocale: config.uiLocale,
+        promptLocale: config.promptLocale,
+        outputLanguage: config.outputLanguage,
       },
       (message) => console.log(`[Agent] ${message}`),
     );
@@ -53,16 +60,16 @@ async function main() {
     if (resumePath) {
       const resumed = await NovelStore.open(resumePath);
       if (!resumed.state.spec || !resumed.state.blueprint) {
-        throw new Error("RESUME_PLAN_REQUIRED");
+        throw new AppError("RESUME_PLAN_REQUIRED");
       }
-      console.log(`\n从状态继续：${resumed.store.statePath}`);
-      printPlan(resumed.state);
+      console.log(`\n${t("cli.resumedFrom", { path: resumed.store.statePath })}`);
+      printPlan(resumed.state, config.uiLocale);
       const completed = await agent.execute(resumed.state, resumed.store);
-      console.log("\n=== 生成完成 ===");
-      console.log(`章节数：${completed.chapters.length}`);
-      console.log(`小说：${resumed.store.novelPath}`);
-      console.log(`状态：${resumed.store.statePath}`);
-      console.log(`调用轨迹：${resumed.store.tracePath}`);
+      console.log(`\n=== ${t("cli.completeHeading")} ===`);
+      console.log(t("cli.chapterCount", { count: completed.chapters.length }));
+      console.log(t("cli.novelPath", { path: resumed.store.novelPath }));
+      console.log(t("cli.statePath", { path: resumed.store.statePath }));
+      console.log(t("cli.tracePath", { path: resumed.store.tracePath }));
       return;
     }
 
@@ -71,35 +78,36 @@ async function main() {
       request = demo
         ? demoRequest
         : await cli.question(
-            "请描述你想写的小说（题材、主角、冲突、风格、章节数等，可以只写一句话）：\n> ",
+            t("cli.requestQuestion"),
           );
     }
-    if (!request.trim()) throw new Error("NOVEL_REQUEST_REQUIRED");
+    if (!request.trim()) throw new AppError("NOVEL_REQUEST_REQUIRED");
 
     const prepared = await agent.prepare(request);
-    printPlan(prepared.state);
-    console.log(`\n规划状态已保存：${prepared.store.statePath}`);
+    printPlan(prepared.state, config.uiLocale);
+    console.log(`\n${t("cli.planSaved", { path: prepared.store.statePath })}`);
 
     if (!yes) {
-      const answer = await cli.question("\n是否按此计划开始生成？[Y/n] ");
+      const answer = await cli.question(`\n${t("cli.confirm")}`);
       if (answer.trim() && !/^y(?:es)?$/iu.test(answer.trim())) {
-        console.log("已停止。你可以查看 state.json 中的规格和大纲。");
+        console.log(t("cli.stopped"));
         return;
       }
     }
 
     const completed = await agent.execute(prepared.state, prepared.store);
-    console.log("\n=== 生成完成 ===");
-    console.log(`章节数：${completed.chapters.length}`);
-    console.log(`小说：${prepared.store.novelPath}`);
-    console.log(`状态：${prepared.store.statePath}`);
-    console.log(`调用轨迹：${prepared.store.tracePath}`);
+    console.log(`\n=== ${t("cli.completeHeading")} ===`);
+    console.log(t("cli.chapterCount", { count: completed.chapters.length }));
+    console.log(t("cli.novelPath", { path: prepared.store.novelPath }));
+    console.log(t("cli.statePath", { path: prepared.store.statePath }));
+    console.log(t("cli.tracePath", { path: prepared.store.tracePath }));
   } finally {
     cli.close();
   }
 }
 
 main().catch((error: unknown) => {
-  console.error("\n生成失败：", error instanceof Error ? error.message : error);
+  const locale = (process.env.NOVEL_AGENT_UI_LOCALE === "en-US" ? "en-US" : "zh-CN") as UiLocale;
+  console.error(`\n${translate(locale, "cli.failed", { message: formatError(locale, error) })}`);
   process.exitCode = 1;
 });

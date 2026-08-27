@@ -46,7 +46,12 @@ NOVEL_AGENT_PROVIDER=codex
 NOVEL_AGENT_CODEX_MODEL=gpt-5.6-terra
 NOVEL_AGENT_TIMEOUT_MS=120000
 NOVEL_AGENT_MAX_PROVIDER_RETRIES=1
+NOVEL_AGENT_UI_LOCALE=zh-CN
+NOVEL_AGENT_PROMPT_LOCALE=zh-CN
+NOVEL_AGENT_OUTPUT_LANGUAGE=zh-CN
 ```
+
+三个语言设置彼此独立：`UI_LOCALE` 控制终端和错误提示，`PROMPT_LOCALE` 标记模型指令语言，`OUTPUT_LANGUAGE` 强制小说规格采用的输出语言。当前内置 `zh-CN` 和 `en-US` 界面资源；小说输出语言可以填写任意模型可理解的语言标签。
 
 这种方式不使用 `OPENROUTER_API_KEY`，消耗 ChatGPT/Codex 订阅用量。每个小说角色调用会创建独立的只读 Codex Thread，禁用网络并要求不使用工具；结构化阶段通过 SDK 的 `outputSchema` 约束 JSON。
 
