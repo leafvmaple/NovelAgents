@@ -54,7 +54,27 @@ export const StoryBlueprintSchema = z
     characters: z.array(CharacterSchema).min(1).max(10),
     chapters: z.array(ChapterPlanSchema).min(1).max(8),
   })
-  .strict();
+  .strict()
+  .superRefine((blueprint, context) => {
+    const characterIds = new Set(blueprint.characters.map((character) => character.id));
+    blueprint.chapters.forEach((chapter, index) => {
+      const expectedNumber = index + 1;
+      if (chapter.number !== expectedNumber) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["chapters", index, "number"],
+          message: `章节编号必须从 1 连续递增；此处应为 ${expectedNumber}。`,
+        });
+      }
+      if (!characterIds.has(chapter.povCharacterId)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["chapters", index, "povCharacterId"],
+          message: "章节视角角色必须引用 characters 中存在的 id。",
+        });
+      }
+    });
+  });
 
 export const ReviewIssueSchema = z
   .object({
@@ -149,21 +169,76 @@ export const NovelStateV1Schema = z
   })
   .strict();
 
-export const NovelStateSchema = z.object({
-  schema: z.literal("novel-agent-state/2.0"),
-  id: z.string().uuid(),
-  status: z.enum(["planning", "awaiting_confirmation", "writing", "paused", "complete", "failed"]),
-  userRequest: z.string().trim().min(1).max(8000),
-  spec: NovelSpecSchema.nullable(),
-  blueprint: StoryBlueprintSchema.nullable(),
-  chapters: z.array(GeneratedChapterSchema),
-  memories: z.array(ChapterMemorySchema),
-  conversation: z.array(ConversationMessageSchema),
-  feedback: z.array(UserFeedbackSchema),
-  currentChapter: z.number().int().positive(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
-}).strict();
+export const NovelStateSchema = z
+  .object({
+    schema: z.literal("novel-agent-state/2.0"),
+    id: z.string().uuid(),
+    status: z.enum(["planning", "awaiting_confirmation", "writing", "paused", "complete", "failed"]),
+    userRequest: z.string().trim().min(1).max(8000),
+    spec: NovelSpecSchema.nullable(),
+    blueprint: StoryBlueprintSchema.nullable(),
+    chapters: z.array(GeneratedChapterSchema),
+    memories: z.array(ChapterMemorySchema),
+    conversation: z.array(ConversationMessageSchema),
+    feedback: z.array(UserFeedbackSchema),
+    currentChapter: z.number().int().positive(),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+  })
+  .strict()
+  .superRefine((state, context) => {
+    const chapterNumbers = state.chapters.map((chapter) => chapter.number);
+    const memoryNumbers = state.memories.map((memory) => memory.chapterNumber);
+    const uniqueChapterNumbers = new Set(chapterNumbers);
+    const uniqueMemoryNumbers = new Set(memoryNumbers);
+    if (uniqueChapterNumbers.size !== chapterNumbers.length) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["chapters"], message: "已生成章节编号不能重复。" });
+    }
+    if (uniqueMemoryNumbers.size !== memoryNumbers.length) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["memories"], message: "章节记忆编号不能重复。" });
+    }
+    const orderedChapters = [...chapterNumbers].sort((a, b) => a - b);
+    const orderedMemories = [...memoryNumbers].sort((a, b) => a - b);
+    if (JSON.stringify(orderedChapters) !== JSON.stringify(orderedMemories)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["memories"],
+        message: "每个已生成章节必须有且只有一条对应的连续性记忆。",
+      });
+    }
+
+    if (!state.blueprint) {
+      if (state.currentChapter !== 1) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ["currentChapter"], message: "没有大纲时当前章节必须为 1。" });
+      }
+      if (state.status === "complete") {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ["status"], message: "没有大纲的运行不能标记为完成。" });
+      }
+      return;
+    }
+
+    const plannedNumbers = new Set(state.blueprint.chapters.map((chapter) => chapter.number));
+    if (chapterNumbers.some((number) => !plannedNumbers.has(number))) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["chapters"], message: "已生成章节必须存在于故事大纲中。" });
+    }
+    const firstMissing = state.blueprint.chapters.find((chapter) => !uniqueChapterNumbers.has(chapter.number));
+    const expectedCurrentChapter = firstMissing?.number ?? state.blueprint.chapters.length + 1;
+    if (state.currentChapter !== expectedCurrentChapter) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["currentChapter"],
+        message: `当前章节应为 ${expectedCurrentChapter}。`,
+      });
+    }
+    const allComplete = !firstMissing;
+    if ((state.status === "complete") !== allComplete) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["status"],
+        message: allComplete ? "全部计划章节完成后状态必须为 complete。" : "仍有计划章节未完成，状态不能为 complete。",
+      });
+    }
+  });
 
 export function migrateNovelState(input: unknown) {
   const current = NovelStateSchema.safeParse(input);
