@@ -23,7 +23,11 @@ const transitions: Record<
   resume_writing: { failed: "writing" },
   chapter_paused: { writing: "paused" },
   run_completed: { writing: "complete", paused: "complete" },
-  user_paused: { awaiting_confirmation: "paused", paused: "paused" },
+  user_paused: {
+    awaiting_confirmation: "paused",
+    writing: "paused",
+    paused: "paused",
+  },
   run_failed: {
     planning: "failed",
     awaiting_confirmation: "failed",

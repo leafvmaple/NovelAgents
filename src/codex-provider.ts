@@ -33,12 +33,15 @@ export class CodexProvider implements ModelProvider {
 
   constructor(private readonly options: CodexProviderOptions) {}
 
-  async complete(request: CompletionRequest) {
+  async complete(request: CompletionRequest, externalSignal?: AbortSignal) {
     const controller = new AbortController();
     const timeout = setTimeout(
       () => controller.abort(),
       this.options.timeoutMs,
     );
+    const signal = externalSignal
+      ? AbortSignal.any([controller.signal, externalSignal])
+      : controller.signal;
     try {
       const thread = this.codex.startThread({
         model: this.options.model,
@@ -51,7 +54,7 @@ export class CodexProvider implements ModelProvider {
         approvalPolicy: "never",
       });
       const turn = await thread.run(buildCodexPrompt(request), {
-        signal: controller.signal,
+        signal,
         ...(request.outputSchema ? { outputSchema: request.outputSchema } : {}),
       });
       const content = turn.finalResponse.trim();
@@ -73,6 +76,15 @@ export class CodexProvider implements ModelProvider {
       };
     } catch (error) {
       if (error instanceof ProviderError) throw error;
+      if (externalSignal?.aborted)
+        throw new ProviderError(
+          this.name,
+          "CANCELLED",
+          false,
+          null,
+          "request cancelled",
+          { cause: error },
+        );
       if (controller.signal.aborted)
         throw new ProviderError(
           this.name,

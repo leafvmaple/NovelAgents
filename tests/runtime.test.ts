@@ -6,6 +6,7 @@ import test from "node:test";
 import { NovelAgent } from "../src/agent.js";
 import { MockProvider } from "../src/provider.js";
 import type { ModelProvider } from "../src/provider.js";
+import { ProviderError } from "../src/errors/provider-error.js";
 
 test("interactive runtime generates one chapter at a time and persists feedback", async () => {
   const outputRoot = await mkdtemp(join(tmpdir(), "novel-agents-test-"));
@@ -131,6 +132,50 @@ test("configured output language overrides a provider's proposed specification l
       "Write a two-chapter mystery in Japanese",
     );
     assert.equal(prepared.state.spec?.language, "ja-JP");
+  } finally {
+    await rm(outputRoot, { recursive: true, force: true });
+  }
+});
+
+test("cancels an active model call and returns the run to paused state", async () => {
+  const outputRoot = await mkdtemp(join(tmpdir(), "novel-agents-cancel-test-"));
+  try {
+    const options = {
+      outputRoot,
+      maxRevisions: 1,
+      maxProviderRetries: 0,
+      uiLocale: "zh-CN" as const,
+      promptLocale: "zh-CN" as const,
+      outputLanguage: "zh-CN",
+    };
+    const preparingAgent = new NovelAgent(new MockProvider(), options);
+    const prepared = await preparingAgent.prepare("写一个两章悬疑故事");
+    const blockingProvider: ModelProvider = {
+      name: "blocking",
+      complete(_request, signal) {
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener(
+            "abort",
+            () => {
+              reject(new ProviderError("blocking", "CANCELLED", false));
+            },
+            { once: true },
+          );
+        });
+      },
+    };
+    const runningAgent = new NovelAgent(blockingProvider, options);
+    const run = runningAgent.runNextChapter(prepared.state, prepared.store);
+    for (
+      let attempt = 0;
+      attempt < 20 && !runningAgent.cancelActiveRun();
+      attempt += 1
+    ) {
+      await new Promise((resolveWait) => setTimeout(resolveWait, 1));
+    }
+    const state = await run;
+    assert.equal(state.status, "paused");
+    assert.equal(state.chapters.length, 0);
   } finally {
     await rm(outputRoot, { recursive: true, force: true });
   }

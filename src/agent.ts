@@ -122,6 +122,8 @@ function localChapterReview(
 }
 
 export class NovelAgent {
+  private activeController: AbortController | null = null;
+
   constructor(
     private readonly provider: ModelProvider,
     private readonly options: NovelAgentOptions,
@@ -152,7 +154,10 @@ export class NovelAgent {
     ) {
       const started = Date.now();
       try {
-        const result = await this.provider.complete(request);
+        const result = await this.provider.complete(
+          request,
+          this.activeController?.signal,
+        );
         await this.emit(store, {
           type: "model_completed",
           stage: purpose,
@@ -378,6 +383,8 @@ export class NovelAgent {
     const startEvent =
       initialState.status === "failed" ? "resume_writing" : "start_writing";
     let state = await this.transition(store, initialState, startEvent);
+    const controller = new AbortController();
+    this.activeController = controller;
 
     try {
       const activeFeedback = state.feedback.filter(
@@ -543,10 +550,21 @@ export class NovelAgent {
       await store.writeNovel(state);
       return state;
     } catch (error) {
+      if (error instanceof ProviderError && error.code === "CANCELLED") {
+        return this.transition(store, state, "user_paused");
+      }
       if (state.status !== "complete")
         await this.transition(store, state, "run_failed");
       throw error;
+    } finally {
+      if (this.activeController === controller) this.activeController = null;
     }
+  }
+
+  cancelActiveRun() {
+    if (!this.activeController) return false;
+    this.activeController.abort();
+    return true;
   }
 
   async runNextChapter(initialState: NovelState, store: NovelStore) {
@@ -619,15 +637,18 @@ export class NovelAgent {
     });
     let response: string;
     if (intent.type === "continue") {
+      const completedBefore = state.chapters.length;
       state = await this.runNextChapterUnlocked(state, store);
       response =
-        state.status === "complete"
-          ? translate(this.options.uiLocale, "agent.novelComplete", {
-              count: state.chapters.length,
-            })
-          : translate(this.options.uiLocale, "agent.chapterComplete", {
-              chapter: state.chapters.at(-1)?.number,
-            });
+        state.chapters.length === completedBefore
+          ? translate(this.options.uiLocale, "agent.paused")
+          : state.status === "complete"
+            ? translate(this.options.uiLocale, "agent.novelComplete", {
+                count: state.chapters.length,
+              })
+            : translate(this.options.uiLocale, "agent.chapterComplete", {
+                chapter: state.chapters.at(-1)?.number,
+              });
     } else if (intent.type === "pause") {
       state = await this.transition(store, state, "user_paused");
       response = translate(this.options.uiLocale, "agent.paused");

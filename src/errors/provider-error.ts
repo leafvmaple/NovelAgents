@@ -4,7 +4,8 @@ export type ProviderErrorCode =
   | "TIMEOUT"
   | "EMPTY_RESPONSE"
   | "INVALID_RESPONSE"
-  | "SDK_ERROR";
+  | "SDK_ERROR"
+  | "CANCELLED";
 
 export class ProviderError extends Error {
   constructor(

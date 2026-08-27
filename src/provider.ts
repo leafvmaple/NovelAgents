@@ -12,7 +12,10 @@ export type CompletionRequest = {
 
 export interface ModelProvider {
   readonly name: string;
-  complete(request: CompletionRequest): Promise<ModelResult>;
+  complete(
+    request: CompletionRequest,
+    signal?: AbortSignal,
+  ): Promise<ModelResult>;
 }
 
 type OpenRouterOptions = {
@@ -42,18 +45,24 @@ export class OpenRouterProvider implements ModelProvider {
 
   constructor(private readonly options: OpenRouterOptions) {}
 
-  async complete(request: CompletionRequest): Promise<ModelResult> {
+  async complete(
+    request: CompletionRequest,
+    externalSignal?: AbortSignal,
+  ): Promise<ModelResult> {
     const controller = new AbortController();
     const timeout = setTimeout(
       () => controller.abort(),
       this.options.timeoutMs,
     );
+    const signal = externalSignal
+      ? AbortSignal.any([controller.signal, externalSignal])
+      : controller.signal;
     try {
       const response = await fetch(
         `${this.options.baseUrl.replace(/\/$/u, "")}/chat/completions`,
         {
           method: "POST",
-          signal: controller.signal,
+          signal,
           headers: {
             Authorization: `Bearer ${this.options.apiKey}`,
             "Content-Type": "application/json",
@@ -135,6 +144,16 @@ export class OpenRouterProvider implements ModelProvider {
       };
     } catch (error) {
       if (error instanceof ProviderError) throw error;
+      if (externalSignal?.aborted) {
+        throw new ProviderError(
+          this.name,
+          "CANCELLED",
+          false,
+          null,
+          "request cancelled",
+          { cause: error },
+        );
+      }
       if (controller.signal.aborted) {
         throw new ProviderError(
           this.name,
