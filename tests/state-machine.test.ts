@@ -28,6 +28,7 @@ test("state reducer accepts declared transitions and rejects implicit ones", () 
   assert.equal(failed.status, "failed");
   assert.throws(
     () => reduceRunState(failed, "user_paused"),
-    (error: unknown) => error instanceof AppError && error.code === "INVALID_STATE_TRANSITION",
+    (error: unknown) =>
+      error instanceof AppError && error.code === "INVALID_STATE_TRANSITION",
   );
 });

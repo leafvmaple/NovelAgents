@@ -1,7 +1,11 @@
 import type { NovelState } from "../domain.js";
 import { promptCatalog, type PromptLocale } from "./catalog.js";
 
-export function routeUserMessageMessages(state: NovelState, message: string, locale: PromptLocale = "zh-CN") {
+export function routeUserMessageMessages(
+  state: NovelState,
+  message: string,
+  locale: PromptLocale = "zh-CN",
+) {
   const text = promptCatalog(locale);
   return [
     {
@@ -20,7 +24,11 @@ export function routeUserMessageMessages(state: NovelState, message: string, loc
   ];
 }
 
-export function answerUserQuestionMessages(state: NovelState, question: string, locale: PromptLocale = "zh-CN") {
+export function answerUserQuestionMessages(
+  state: NovelState,
+  question: string,
+  locale: PromptLocale = "zh-CN",
+) {
   const text = promptCatalog(locale);
   return [
     {
@@ -33,7 +41,12 @@ export function answerUserQuestionMessages(state: NovelState, question: string, 
         question,
         spec: state.spec,
         blueprint: state.blueprint,
-        chapters: state.chapters.map(({ number, title, content, review }) => ({ number, title, content, review })),
+        chapters: state.chapters.map(({ number, title, content, review }) => ({
+          number,
+          title,
+          content,
+          review,
+        })),
         memories: state.memories,
         feedback: state.feedback,
       }),

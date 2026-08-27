@@ -1,4 +1,4 @@
-import { z } from "zod";
+import type { z } from "zod";
 import { jsonrepair } from "jsonrepair";
 
 function stripCodeFence(value: string) {
@@ -8,7 +8,13 @@ function stripCodeFence(value: string) {
 
 function unwrapEnvelope(value: unknown): unknown {
   let current = value;
-  const envelopeKeys = new Set(["response", "data", "result", "output", "json"]);
+  const envelopeKeys = new Set([
+    "response",
+    "data",
+    "result",
+    "output",
+    "json",
+  ]);
   for (let depth = 0; depth < 3; depth += 1) {
     if (Array.isArray(current)) {
       if (current.length !== 1) return current;
@@ -65,9 +71,9 @@ export function extractJson(value: string): unknown {
   throw new Error("MODEL_RESPONSE_JSON_MISSING");
 }
 
-export function parseModelJson<S extends z.ZodTypeAny>(
-  schema: S,
+export function parseModelJson<Output, Input>(
+  schema: z.ZodType<Output, z.ZodTypeDef, Input>,
   value: string,
-): z.output<S> {
+): Output {
   return schema.parse(extractJson(value));
 }

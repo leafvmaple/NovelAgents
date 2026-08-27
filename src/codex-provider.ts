@@ -35,7 +35,10 @@ export class CodexProvider implements ModelProvider {
 
   async complete(request: CompletionRequest) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs);
+    const timeout = setTimeout(
+      () => controller.abort(),
+      this.options.timeoutMs,
+    );
     try {
       const thread = this.codex.startThread({
         model: this.options.model,
@@ -70,10 +73,28 @@ export class CodexProvider implements ModelProvider {
       };
     } catch (error) {
       if (error instanceof ProviderError) throw error;
-      if (controller.signal.aborted) throw new ProviderError(this.name, "TIMEOUT", true, null, "request timed out", { cause: error });
+      if (controller.signal.aborted)
+        throw new ProviderError(
+          this.name,
+          "TIMEOUT",
+          true,
+          null,
+          "request timed out",
+          { cause: error },
+        );
       const message = error instanceof Error ? error.message : String(error);
-      const retryable = /(?:429|5\d\d|temporar|overload|unavailable|connection|reset)/iu.test(message);
-      throw new ProviderError(this.name, "SDK_ERROR", retryable, null, message, { cause: error });
+      const retryable =
+        /(?:429|5\d\d|temporar|overload|unavailable|connection|reset)/iu.test(
+          message,
+        );
+      throw new ProviderError(
+        this.name,
+        "SDK_ERROR",
+        retryable,
+        null,
+        message,
+        { cause: error },
+      );
     } finally {
       clearTimeout(timeout);
     }

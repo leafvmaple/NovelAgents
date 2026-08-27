@@ -22,7 +22,10 @@ export const NovelSpecSchema = z
 
 export const CharacterSchema = z
   .object({
-    id: z.string().trim().regex(/^[a-z][a-z0-9_-]{0,31}$/),
+    id: z
+      .string()
+      .trim()
+      .regex(/^[a-z][a-z0-9_-]{0,31}$/),
     name: z.string().trim().min(1).max(40),
     role: z.string().trim().min(1).max(80),
     goal: z.string().trim().min(1).max(240),
@@ -56,7 +59,9 @@ export const StoryBlueprintSchema = z
   })
   .strict()
   .superRefine((blueprint, context) => {
-    const characterIds = new Set(blueprint.characters.map((character) => character.id));
+    const characterIds = new Set(
+      blueprint.characters.map((character) => character.id),
+    );
     blueprint.chapters.forEach((chapter, index) => {
       const expectedNumber = index + 1;
       if (chapter.number !== expectedNumber) {
@@ -129,38 +134,57 @@ export const UserIntentSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("continue") }).strict(),
   z.object({ type: z.literal("pause") }).strict(),
   z.object({ type: z.literal("status") }).strict(),
-  z.object({ type: z.literal("ask"), question: z.string().trim().min(1).max(2000) }).strict(),
-  z.object({
-    type: z.literal("feedback"),
-    scope: z.enum(["global", "next_chapter"]),
-    instruction: z.string().trim().min(1).max(2000),
-  }).strict(),
+  z
+    .object({
+      type: z.literal("ask"),
+      question: z.string().trim().min(1).max(2000),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("feedback"),
+      scope: z.enum(["global", "next_chapter"]),
+      instruction: z.string().trim().min(1).max(2000),
+    })
+    .strict(),
 ]);
 
-export const UserIntentResultSchema = z.object({ intent: UserIntentSchema }).strict();
+export const UserIntentResultSchema = z
+  .object({ intent: UserIntentSchema })
+  .strict();
 
-export const ConversationMessageSchema = z.object({
-  id: z.string().uuid(),
-  role: z.enum(["user", "assistant"]),
-  content: z.string().trim().min(1).max(8000),
-  intent: UserIntentSchema.nullable(),
-  createdAt: z.string().datetime(),
-}).strict();
+export const ConversationMessageSchema = z
+  .object({
+    id: z.string().uuid(),
+    role: z.enum(["user", "assistant"]),
+    content: z.string().trim().min(1).max(8000),
+    intent: UserIntentSchema.nullable(),
+    createdAt: z.string().datetime(),
+  })
+  .strict();
 
-export const UserFeedbackSchema = z.object({
-  id: z.string().uuid(),
-  scope: z.enum(["global", "next_chapter"]),
-  instruction: z.string().trim().min(1).max(2000),
-  status: z.enum(["pending", "applied"]),
-  createdAt: z.string().datetime(),
-  appliedToChapter: z.number().int().positive().nullable(),
-}).strict();
+export const UserFeedbackSchema = z
+  .object({
+    id: z.string().uuid(),
+    scope: z.enum(["global", "next_chapter"]),
+    instruction: z.string().trim().min(1).max(2000),
+    status: z.enum(["pending", "applied"]),
+    createdAt: z.string().datetime(),
+    appliedToChapter: z.number().int().positive().nullable(),
+  })
+  .strict();
 
 export const NovelStateV1Schema = z
   .object({
     schema: z.literal("novel-agent-state/1.0"),
     id: z.string().uuid(),
-    status: z.enum(["planning", "awaiting_confirmation", "writing", "complete", "failed"]),
+    status: z.enum([
+      "planning",
+      "awaiting_confirmation",
+      "writing",
+      "complete",
+      "failed",
+    ]),
     userRequest: z.string().trim().min(1).max(8000),
     spec: NovelSpecSchema.nullable(),
     blueprint: StoryBlueprintSchema.nullable(),
@@ -175,7 +199,14 @@ export const NovelStateSchema = z
   .object({
     schema: z.literal("novel-agent-state/2.0"),
     id: z.string().uuid(),
-    status: z.enum(["planning", "awaiting_confirmation", "writing", "paused", "complete", "failed"]),
+    status: z.enum([
+      "planning",
+      "awaiting_confirmation",
+      "writing",
+      "paused",
+      "complete",
+      "failed",
+    ]),
     userRequest: z.string().trim().min(1).max(8000),
     spec: NovelSpecSchema.nullable(),
     blueprint: StoryBlueprintSchema.nullable(),
@@ -194,10 +225,18 @@ export const NovelStateSchema = z
     const uniqueChapterNumbers = new Set(chapterNumbers);
     const uniqueMemoryNumbers = new Set(memoryNumbers);
     if (uniqueChapterNumbers.size !== chapterNumbers.length) {
-      context.addIssue({ code: z.ZodIssueCode.custom, path: ["chapters"], message: "已生成章节编号不能重复。" });
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["chapters"],
+        message: "已生成章节编号不能重复。",
+      });
     }
     if (uniqueMemoryNumbers.size !== memoryNumbers.length) {
-      context.addIssue({ code: z.ZodIssueCode.custom, path: ["memories"], message: "章节记忆编号不能重复。" });
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["memories"],
+        message: "章节记忆编号不能重复。",
+      });
     }
     const orderedChapters = [...chapterNumbers].sort((a, b) => a - b);
     const orderedMemories = [...memoryNumbers].sort((a, b) => a - b);
@@ -211,20 +250,37 @@ export const NovelStateSchema = z
 
     if (!state.blueprint) {
       if (state.currentChapter !== 1) {
-        context.addIssue({ code: z.ZodIssueCode.custom, path: ["currentChapter"], message: "没有大纲时当前章节必须为 1。" });
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["currentChapter"],
+          message: "没有大纲时当前章节必须为 1。",
+        });
       }
       if (state.status === "complete") {
-        context.addIssue({ code: z.ZodIssueCode.custom, path: ["status"], message: "没有大纲的运行不能标记为完成。" });
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["status"],
+          message: "没有大纲的运行不能标记为完成。",
+        });
       }
       return;
     }
 
-    const plannedNumbers = new Set(state.blueprint.chapters.map((chapter) => chapter.number));
+    const plannedNumbers = new Set(
+      state.blueprint.chapters.map((chapter) => chapter.number),
+    );
     if (chapterNumbers.some((number) => !plannedNumbers.has(number))) {
-      context.addIssue({ code: z.ZodIssueCode.custom, path: ["chapters"], message: "已生成章节必须存在于故事大纲中。" });
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["chapters"],
+        message: "已生成章节必须存在于故事大纲中。",
+      });
     }
-    const firstMissing = state.blueprint.chapters.find((chapter) => !uniqueChapterNumbers.has(chapter.number));
-    const expectedCurrentChapter = firstMissing?.number ?? state.blueprint.chapters.length + 1;
+    const firstMissing = state.blueprint.chapters.find(
+      (chapter) => !uniqueChapterNumbers.has(chapter.number),
+    );
+    const expectedCurrentChapter =
+      firstMissing?.number ?? state.blueprint.chapters.length + 1;
     if (state.currentChapter !== expectedCurrentChapter) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -237,7 +293,9 @@ export const NovelStateSchema = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["status"],
-        message: allComplete ? "全部计划章节完成后状态必须为 complete。" : "仍有计划章节未完成，状态不能为 complete。",
+        message: allComplete
+          ? "全部计划章节完成后状态必须为 complete。"
+          : "仍有计划章节未完成，状态不能为 complete。",
       });
     }
   });

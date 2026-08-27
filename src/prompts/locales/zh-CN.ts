@@ -1,6 +1,9 @@
 export const zhCNPrompt = {
   common: {
-    jsonOnly: ["只返回一个合法 JSON 对象。", "不要使用 Markdown 代码块，不要添加解释，不要添加 JSON 之外的文字。"],
+    jsonOnly: [
+      "只返回一个合法 JSON 对象。",
+      "不要使用 Markdown 代码块，不要添加解释，不要添加 JSON 之外的文字。",
+    ],
     originality: [
       "如果用户提到具体作家或作品，只能提取古雅/明快、叙事节奏、人物群像、道德冲突等高层特征，不得仿写可识别的原文表达。",
       "标题、人物、门派、武功、秘籍、地名、道具和情节必须原创，不得复用或近似改写现有作品的专有元素。",
@@ -73,16 +76,29 @@ export const zhCNPrompt = {
     "ask：用户只是询问作品、计划、角色、伏笔或系统行为，不要求修改。",
     "返回对象的 intent 字段必须符合给定 Schema，不要解释。",
   ],
-  answer: "你是小说项目助手。只根据给定状态简洁回答，不续写正文，不虚构尚未发生的事实。",
+  answer:
+    "你是小说项目助手。只根据给定状态简洁回答，不续写正文，不虚构尚未发生的事实。",
   labels: {
-    originalRequest: "原始需求", novelSpec: "小说规格", blueprint: "故事圣经", chapterPlan: "本章计划",
-    memories: "连续性记忆", previousMemories: "此前记忆", content: "待审正文", finalContent: "已定稿正文",
-    review: "责任编辑意见", original: "原稿", feedback: "用户追加要求", targetLength: "目标长度：约 {count} 个字符。",
+    originalRequest: "原始需求",
+    novelSpec: "小说规格",
+    blueprint: "故事圣经",
+    chapterPlan: "本章计划",
+    memories: "连续性记忆",
+    previousMemories: "此前记忆",
+    content: "待审正文",
+    finalContent: "已定稿正文",
+    review: "责任编辑意见",
+    original: "原稿",
+    feedback: "用户追加要求",
+    targetLength: "目标长度：约 {count} 个字符。",
   },
   localReview: {
-    tooShortProblem: "正文只有 {actual} 个字符，低于最低完整章节长度 {minimum}。",
-    tooShortSuggestion: "重写为至少 {minimum} 个字符的完整场景正文，不能输出提纲、拒绝说明或摘要。",
+    tooShortProblem:
+      "正文只有 {actual} 个字符，低于最低完整章节长度 {minimum}。",
+    tooShortSuggestion:
+      "重写为至少 {minimum} 个字符的完整场景正文，不能输出提纲、拒绝说明或摘要。",
     foreignWordsProblem: "中文正文混入了未本地化的英文表达：{words}。",
-    foreignWordsSuggestion: "将非必要英文表达改写为自然中文；用户明确要求保留的专有名词除外。",
+    foreignWordsSuggestion:
+      "将非必要英文表达改写为自然中文；用户明确要求保留的专有名词除外。",
   },
 } as const;

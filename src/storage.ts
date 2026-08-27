@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, appendFile, open, readFile, rename, unlink } from "node:fs/promises";
+import {
+  mkdir,
+  appendFile,
+  open,
+  readFile,
+  rename,
+  unlink,
+} from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { migrateNovelState, type NovelState } from "./domain.js";
 import type { AgentEvent, PersistedAgentEvent } from "./events.js";
@@ -7,7 +14,10 @@ import type { AgentEvent, PersistedAgentEvent } from "./events.js";
 const runLockTails = new Map<string, Promise<void>>();
 
 async function atomicWrite(path: string, content: string) {
-  const temporaryPath = resolve(dirname(path), `.${basename(path)}.${process.pid}.${randomUUID()}.tmp`);
+  const temporaryPath = resolve(
+    dirname(path),
+    `.${basename(path)}.${process.pid}.${randomUUID()}.tmp`,
+  );
   const handle = await open(temporaryPath, "wx");
   try {
     await handle.writeFile(content, "utf8");
@@ -46,7 +56,10 @@ export class NovelStore {
   static async create(root: string, state: NovelState) {
     const stamp = new Date().toISOString().replaceAll(/[:.]/gu, "-");
     const title = state.spec?.workingTitle ?? "planning";
-    const directory = resolve(root, `${stamp}-${safeName(title)}-${state.id.slice(0, 8)}`);
+    const directory = resolve(
+      root,
+      `${stamp}-${safeName(title)}-${state.id.slice(0, 8)}`,
+    );
     await mkdir(directory, { recursive: true });
     const store = new NovelStore(directory);
     await store.saveState(state);
@@ -55,10 +68,13 @@ export class NovelStore {
 
   static async open(path: string) {
     const resolvedPath = resolve(path);
-    const statePath = basename(resolvedPath).toLowerCase() === "state.json"
-      ? resolvedPath
-      : resolve(resolvedPath, "state.json");
-    const raw = JSON.parse(await readFile(statePath, "utf8")) as { schema?: unknown };
+    const statePath =
+      basename(resolvedPath).toLowerCase() === "state.json"
+        ? resolvedPath
+        : resolve(resolvedPath, "state.json");
+    const raw = JSON.parse(await readFile(statePath, "utf8")) as {
+      schema?: unknown;
+    };
     const state = migrateNovelState(raw);
     const store = new NovelStore(dirname(statePath));
     if (raw.schema !== state.schema) await store.saveState(state);
@@ -70,7 +86,9 @@ export class NovelStore {
   }
 
   async loadState() {
-    return migrateNovelState(JSON.parse(await readFile(this.statePath, "utf8")));
+    return migrateNovelState(
+      JSON.parse(await readFile(this.statePath, "utf8")),
+    );
   }
 
   async withLock<T>(operation: () => Promise<T>): Promise<T> {
@@ -92,15 +110,24 @@ export class NovelStore {
   }
 
   async trace(event: AgentEvent) {
-    const value: PersistedAgentEvent = { at: new Date().toISOString(), ...event };
+    const value: PersistedAgentEvent = {
+      at: new Date().toISOString(),
+      ...event,
+    };
     await appendFile(this.tracePath, `${JSON.stringify(value)}\n`, "utf8");
   }
 
   async writeNovel(state: NovelState) {
     const chinese = state.spec?.language.toLowerCase().startsWith("zh") ?? true;
-    const title = state.blueprint?.title ?? state.spec?.workingTitle ?? (chinese ? "未命名小说" : "Untitled Novel");
+    const title =
+      state.blueprint?.title ??
+      state.spec?.workingTitle ??
+      (chinese ? "未命名小说" : "Untitled Novel");
     const chapters = state.chapters
-      .map((chapter) => `${chinese ? `## 第${chapter.number}章` : `## Chapter ${chapter.number}`} ${chapter.title}\n\n${chapter.content}`)
+      .map(
+        (chapter) =>
+          `${chinese ? `## 第${chapter.number}章` : `## Chapter ${chapter.number}`} ${chapter.title}\n\n${chapter.content}`,
+      )
       .join("\n\n---\n\n");
     await atomicWrite(this.novelPath, `# ${title}\n\n${chapters}\n`);
   }

@@ -5,21 +5,23 @@ import { extractJson, parseModelJson } from "../src/json.js";
 
 describe("model JSON parsing", () => {
   it("extracts JSON from a Markdown fence", () => {
-    assert.deepEqual(extractJson("```json\n{\"ok\":true}\n```"), { ok: true });
+    assert.deepEqual(extractJson('```json\n{"ok":true}\n```'), { ok: true });
   });
 
   it("extracts an object surrounded by prose", () => {
-    assert.deepEqual(extractJson("result: {\"value\":3} done"), { value: 3 });
+    assert.deepEqual(extractJson('result: {"value":3} done'), { value: 3 });
   });
 
   it("validates the extracted shape", () => {
     const schema = z.object({ value: z.number() }).strict();
-    assert.deepEqual(parseModelJson(schema, "{\"value\":7}"), { value: 7 });
+    assert.deepEqual(parseModelJson(schema, '{"value":7}'), { value: 7 });
   });
 
   it("unwraps a common model response envelope", () => {
     const schema = z.object({ value: z.number() }).strict();
-    assert.deepEqual(parseModelJson(schema, '{"response":{"value":7}}'), { value: 7 });
+    assert.deepEqual(parseModelJson(schema, '{"response":{"value":7}}'), {
+      value: 7,
+    });
   });
 
   it("repairs minor JSON syntax errors locally", () => {

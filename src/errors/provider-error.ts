@@ -15,7 +15,10 @@ export class ProviderError extends Error {
     detail = "",
     options?: ErrorOptions,
   ) {
-    super(`${provider}:${code}${status === null ? "" : `:${status}`}${detail ? `:${detail}` : ""}`, options);
+    super(
+      `${provider}:${code}${status === null ? "" : `:${status}`}${detail ? `:${detail}` : ""}`,
+      options,
+    );
     this.name = "ProviderError";
   }
 }

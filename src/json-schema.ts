@@ -1,4 +1,4 @@
-import { z } from "zod";
+import type { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
 type JsonObject = Record<string, unknown>;
@@ -9,7 +9,9 @@ function isJsonObject(value: unknown): value is JsonObject {
 
 function normalizeExclusiveBounds(value: unknown, path = "schema"): unknown {
   if (Array.isArray(value)) {
-    return value.map((item, index) => normalizeExclusiveBounds(item, `${path}[${index}]`));
+    return value.map((item, index) =>
+      normalizeExclusiveBounds(item, `${path}[${index}]`),
+    );
   }
   if (!isJsonObject(value)) return value;
 
@@ -32,7 +34,9 @@ function normalizeExclusiveBounds(value: unknown, path = "schema"): unknown {
 
     const inclusiveValue = normalized[inclusiveKey];
     if (typeof inclusiveValue !== "number") {
-      throw new Error(`JSON_SCHEMA_BOOLEAN_BOUND_WITHOUT_NUMBER:${path}.${exclusiveKey}`);
+      throw new Error(
+        `JSON_SCHEMA_BOOLEAN_BOUND_WITHOUT_NUMBER:${path}.${exclusiveKey}`,
+      );
     }
     normalized[exclusiveKey] = inclusiveValue;
     delete normalized[inclusiveKey];
@@ -42,8 +46,11 @@ function normalizeExclusiveBounds(value: unknown, path = "schema"): unknown {
 }
 
 export function createOpenAiOutputSchema(schema: z.ZodTypeAny): JsonObject {
+  // zod-to-json-schema exposes a legacy `any`-based Zod signature.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   const generated = zodToJsonSchema(schema, { target: "openAi" });
   const normalized = normalizeExclusiveBounds(generated);
-  if (!isJsonObject(normalized)) throw new Error("JSON_SCHEMA_ROOT_MUST_BE_OBJECT");
+  if (!isJsonObject(normalized))
+    throw new Error("JSON_SCHEMA_ROOT_MUST_BE_OBJECT");
   return normalized;
 }

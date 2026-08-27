@@ -8,7 +8,10 @@ type PromptCatalogShape<T> = T extends readonly string[]
 
 export const enUSPrompt = {
   common: {
-    jsonOnly: ["Return exactly one valid JSON object.", "Do not use Markdown fences, explanations, or text outside JSON."],
+    jsonOnly: [
+      "Return exactly one valid JSON object.",
+      "Do not use Markdown fences, explanations, or text outside JSON.",
+    ],
     originality: [
       "If the user names an author or work, extract only high-level traits such as tone, pacing, ensemble structure, or moral conflict; never imitate recognizable wording.",
       "Titles, characters, factions, abilities, books, places, props, and plots must be original and must not reuse protected elements from existing works.",
@@ -81,16 +84,30 @@ export const enUSPrompt = {
     "ask means a question about the work, plan, characters, threads, or system behavior that does not request a change.",
     "The intent field of the returned object must match the supplied Schema. Do not explain.",
   ],
-  answer: "You assist with a novel project. Answer concisely from the supplied state, do not continue the prose, and do not invent facts that have not occurred.",
+  answer:
+    "You assist with a novel project. Answer concisely from the supplied state, do not continue the prose, and do not invent facts that have not occurred.",
   labels: {
-    originalRequest: "Original request", novelSpec: "Novel specification", blueprint: "Story bible", chapterPlan: "Chapter plan",
-    memories: "Continuity memory", previousMemories: "Previous memory", content: "Draft to review", finalContent: "Final prose",
-    review: "Editor feedback", original: "Original draft", feedback: "Additional user instructions", targetLength: "Target length: about {count} characters.",
+    originalRequest: "Original request",
+    novelSpec: "Novel specification",
+    blueprint: "Story bible",
+    chapterPlan: "Chapter plan",
+    memories: "Continuity memory",
+    previousMemories: "Previous memory",
+    content: "Draft to review",
+    finalContent: "Final prose",
+    review: "Editor feedback",
+    original: "Original draft",
+    feedback: "Additional user instructions",
+    targetLength: "Target length: about {count} characters.",
   },
   localReview: {
-    tooShortProblem: "The draft has {actual} characters, below the minimum complete chapter length of {minimum}.",
-    tooShortSuggestion: "Rewrite it as a complete scene of at least {minimum} characters; do not return an outline, refusal, or summary.",
-    foreignWordsProblem: "The Chinese draft contains untranslated English expressions: {words}.",
-    foreignWordsSuggestion: "Rewrite unnecessary English in natural Chinese, except proper nouns explicitly requested by the user.",
+    tooShortProblem:
+      "The draft has {actual} characters, below the minimum complete chapter length of {minimum}.",
+    tooShortSuggestion:
+      "Rewrite it as a complete scene of at least {minimum} characters; do not return an outline, refusal, or summary.",
+    foreignWordsProblem:
+      "The Chinese draft contains untranslated English expressions: {words}.",
+    foreignWordsSuggestion:
+      "Rewrite unnecessary English in natural Chinese, except proper nouns explicitly requested by the user.",
   },
 } as const satisfies PromptCatalogShape<typeof zhCNPrompt>;

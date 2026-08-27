@@ -5,18 +5,29 @@ import type { AgentEvent, ProgressCode } from "../events.js";
 
 export const locales = ["zh-CN", "en-US"] as const;
 export type UiLocale = (typeof locales)[number];
-export type MessageKey = { [S in keyof typeof zhCN]: `${S & string}.${keyof (typeof zhCN)[S] & string}` }[keyof typeof zhCN];
+export type MessageKey = {
+  [S in keyof typeof zhCN]: `${S & string}.${keyof (typeof zhCN)[S] & string}`;
+}[keyof typeof zhCN];
 const catalogs = { "zh-CN": zhCN, "en-US": enUS };
+type MessageParam = string | number | boolean | null | undefined;
 
-export function translate(locale: UiLocale, key: MessageKey, params: Record<string, unknown> = {}) {
+export function translate(
+  locale: UiLocale,
+  key: MessageKey,
+  params: Record<string, MessageParam> = {},
+) {
   const [section, name] = key.split(".") as [keyof typeof zhCN, string];
   const catalog = catalogs[locale] as Record<string, Record<string, string>>;
   const template = catalog[section]?.[name] ?? key;
-  return template.replace(/\{(\w+)\}/gu, (_, param: string) => String(params[param] ?? `{${param}}`));
+  return template.replace(/\{(\w+)\}/gu, (_, param: string) => {
+    const value = params[param];
+    return value === null || value === undefined ? `{${param}}` : String(value);
+  });
 }
 
 export function formatError(locale: UiLocale, error: unknown) {
-  if (error instanceof AppError) return translate(locale, `errors.${error.code}`, error.params);
+  if (error instanceof AppError)
+    return translate(locale, `errors.${error.code}`, error.params);
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -31,5 +42,7 @@ const progressMessageKeys: Record<ProgressCode, MessageKey> = {
 };
 
 export function formatAgentEvent(locale: UiLocale, event: AgentEvent) {
-  return event.type === "progress" ? translate(locale, progressMessageKeys[event.code], event.params) : null;
+  return event.type === "progress"
+    ? translate(locale, progressMessageKeys[event.code], event.params)
+    : null;
 }

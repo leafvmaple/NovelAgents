@@ -8,6 +8,12 @@ export function promptCatalog(locale: PromptLocale) {
   return locale === "en-US" ? enUSPrompt : zhCNPrompt;
 }
 
-export function interpolatePrompt(template: string, params: Record<string, unknown>) {
-  return template.replace(/\{(\w+)\}/gu, (_, key: string) => String(params[key] ?? `{${key}}`));
+export function interpolatePrompt(
+  template: string,
+  params: Record<string, string | number | boolean | null | undefined>,
+) {
+  return template.replace(/\{(\w+)\}/gu, (_, key: string) => {
+    const value = params[key];
+    return value === null || value === undefined ? `{${key}}` : String(value);
+  });
 }

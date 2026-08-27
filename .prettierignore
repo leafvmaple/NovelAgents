@@ -1,0 +1,5 @@
+dist/
+node_modules/
+outputs/
+.pnpm-store/
+pnpm-lock.yaml

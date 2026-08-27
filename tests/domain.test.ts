@@ -33,12 +33,24 @@ test("blueprint rejects duplicate, discontinuous, and missing POV references", (
     styleGuide: ["第三人称", "语言克制"],
     characters: [character],
   };
-  assert.equal(StoryBlueprintSchema.safeParse({ ...base, chapters: [chapter(1), chapter(1)] }).success, false);
-  assert.equal(StoryBlueprintSchema.safeParse({ ...base, chapters: [chapter(2)] }).success, false);
-  assert.equal(StoryBlueprintSchema.safeParse({
-    ...base,
-    chapters: [{ ...chapter(1), povCharacterId: "missing" }],
-  }).success, false);
+  assert.equal(
+    StoryBlueprintSchema.safeParse({
+      ...base,
+      chapters: [chapter(1), chapter(1)],
+    }).success,
+    false,
+  );
+  assert.equal(
+    StoryBlueprintSchema.safeParse({ ...base, chapters: [chapter(2)] }).success,
+    false,
+  );
+  assert.equal(
+    StoryBlueprintSchema.safeParse({
+      ...base,
+      chapters: [{ ...chapter(1), povCharacterId: "missing" }],
+    }).success,
+    false,
+  );
 });
 
 test("state rejects completion and current chapter values inconsistent with the blueprint", () => {

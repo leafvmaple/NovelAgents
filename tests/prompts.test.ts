@@ -9,12 +9,19 @@ test("request prompt keeps prompt locale and output language independent", () =>
     outputLanguage: "ja-JP",
   });
   assert.match(messages[0]?.content ?? "", /requirements analyst/u);
-  assert.match(messages[0]?.content ?? "", /required novel output language is ja-JP/u);
+  assert.match(
+    messages[0]?.content ?? "",
+    /required novel output language is ja-JP/u,
+  );
   assert.doesNotMatch(messages[0]?.content ?? "", /你是小说项目/u);
 });
 
 test("JSON repair prompt is built outside agent workflow code", () => {
-  const messages = repairJsonMessages({ originalTaskMessages: [], validationErrors: [], originalJson: "{}" });
+  const messages = repairJsonMessages({
+    originalTaskMessages: [],
+    validationErrors: [],
+    originalJson: "{}",
+  });
   assert.equal(messages[0]?.role, "system");
   assert.match(messages[0]?.content ?? "", /JSON 数据修复器/u);
 });

@@ -5,18 +5,26 @@ import type {
   NovelSpec,
   StoryBlueprint,
 } from "./domain.js";
-import { interpolatePrompt, promptCatalog, type PromptLocale } from "./prompts/catalog.js";
+import {
+  interpolatePrompt,
+  promptCatalog,
+  type PromptLocale,
+} from "./prompts/catalog.js";
 
 function section(label: string, value: unknown) {
   return `${label}:\n${typeof value === "string" ? value : JSON.stringify(value, null, 2)}`;
 }
 
 function memoryContext(memories: ChapterMemory[], locale: PromptLocale) {
-  return memories.length === 0 ? promptCatalog(locale).common.noMemories : JSON.stringify(memories, null, 2);
+  return memories.length === 0
+    ? promptCatalog(locale).common.noMemories
+    : JSON.stringify(memories, null, 2);
 }
 
 function feedbackContext(feedback: string[] | undefined, locale: PromptLocale) {
-  return feedback?.length ? feedback.join("\n") : promptCatalog(locale).common.none;
+  return feedback?.length
+    ? feedback.join("\n")
+    : promptCatalog(locale).common.none;
 }
 
 export function analyzeRequestMessages(
@@ -37,7 +45,10 @@ export function analyzeRequestMessages(
         ...text.common.jsonOnly,
       ].join("\n"),
     },
-    { role: "user" as const, content: `<USER_NOVEL_REQUEST>\n${userRequest}\n</USER_NOVEL_REQUEST>` },
+    {
+      role: "user" as const,
+      content: `<USER_NOVEL_REQUEST>\n${userRequest}\n</USER_NOVEL_REQUEST>`,
+    },
   ];
 }
 
@@ -50,11 +61,18 @@ export function blueprintMessages(
   return [
     {
       role: "system" as const,
-      content: [...text.blueprint, ...text.common.originality, ...text.common.jsonOnly].join("\n"),
+      content: [
+        ...text.blueprint,
+        ...text.common.originality,
+        ...text.common.jsonOnly,
+      ].join("\n"),
     },
     {
       role: "user" as const,
-      content: [section(text.labels.originalRequest, userRequest), section(text.labels.novelSpec, spec)].join("\n\n"),
+      content: [
+        section(text.labels.originalRequest, userRequest),
+        section(text.labels.novelSpec, spec),
+      ].join("\n\n"),
     },
   ];
 }
@@ -70,11 +88,16 @@ export function draftChapterMessages(input: {
   const locale = input.promptLocale ?? "zh-CN";
   const text = promptCatalog(locale);
   return [
-    { role: "system" as const, content: [...text.draft, ...text.common.originality].join("\n") },
+    {
+      role: "system" as const,
+      content: [...text.draft, ...text.common.originality].join("\n"),
+    },
     {
       role: "user" as const,
       content: [
-        interpolatePrompt(text.labels.targetLength, { count: input.spec.targetWordsPerChapter }),
+        interpolatePrompt(text.labels.targetLength, {
+          count: input.spec.targetWordsPerChapter,
+        }),
         section(text.labels.novelSpec, input.spec),
         section(text.labels.blueprint, input.blueprint),
         section(text.labels.chapterPlan, input.chapter),
@@ -97,14 +120,20 @@ export function reviewChapterMessages(input: {
   const locale = input.promptLocale ?? "zh-CN";
   const text = promptCatalog(locale);
   return [
-    { role: "system" as const, content: [...text.review, ...text.common.jsonOnly].join("\n") },
+    {
+      role: "system" as const,
+      content: [...text.review, ...text.common.jsonOnly].join("\n"),
+    },
     {
       role: "user" as const,
       content: [
         section(text.labels.novelSpec, input.spec),
         section(text.labels.blueprint, input.blueprint),
         section(text.labels.chapterPlan, input.chapter),
-        section(text.labels.previousMemories, memoryContext(input.memories, locale)),
+        section(
+          text.labels.previousMemories,
+          memoryContext(input.memories, locale),
+        ),
         section(text.labels.content, input.content),
         section(text.labels.feedback, feedbackContext(input.feedback, locale)),
       ].join("\n\n"),
@@ -125,14 +154,22 @@ export function reviseChapterMessages(input: {
   const locale = input.promptLocale ?? "zh-CN";
   const text = promptCatalog(locale);
   return [
-    { role: "system" as const, content: [...text.revise, ...text.common.originality].join("\n") },
+    {
+      role: "system" as const,
+      content: [...text.revise, ...text.common.originality].join("\n"),
+    },
     {
       role: "user" as const,
       content: [
-        section(text.labels.novelSpec, input.spec), section(text.labels.blueprint, input.blueprint),
+        section(text.labels.novelSpec, input.spec),
+        section(text.labels.blueprint, input.blueprint),
         section(text.labels.chapterPlan, input.chapter),
-        section(text.labels.previousMemories, memoryContext(input.memories, locale)),
-        section(text.labels.review, input.review), section(text.labels.original, input.original),
+        section(
+          text.labels.previousMemories,
+          memoryContext(input.memories, locale),
+        ),
+        section(text.labels.review, input.review),
+        section(text.labels.original, input.original),
         section(text.labels.feedback, feedbackContext(input.feedback, locale)),
       ].join("\n\n"),
     },
@@ -149,12 +186,19 @@ export function memoryMessages(input: {
   const locale = input.promptLocale ?? "zh-CN";
   const text = promptCatalog(locale);
   return [
-    { role: "system" as const, content: [...text.memory, ...text.common.jsonOnly].join("\n") },
+    {
+      role: "system" as const,
+      content: [...text.memory, ...text.common.jsonOnly].join("\n"),
+    },
     {
       role: "user" as const,
       content: [
-        section(text.labels.blueprint, input.blueprint), section(text.labels.chapterPlan, input.chapter),
-        section(text.labels.previousMemories, memoryContext(input.previousMemories, locale)),
+        section(text.labels.blueprint, input.blueprint),
+        section(text.labels.chapterPlan, input.chapter),
+        section(
+          text.labels.previousMemories,
+          memoryContext(input.previousMemories, locale),
+        ),
         section(text.labels.finalContent, input.content),
       ].join("\n\n"),
     },

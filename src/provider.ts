@@ -44,7 +44,10 @@ export class OpenRouterProvider implements ModelProvider {
 
   async complete(request: CompletionRequest): Promise<ModelResult> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs);
+    const timeout = setTimeout(
+      () => controller.abort(),
+      this.options.timeoutMs,
+    );
     try {
       const response = await fetch(
         `${this.options.baseUrl.replace(/\/$/u, "")}/chat/completions`,
@@ -87,7 +90,14 @@ export class OpenRouterProvider implements ModelProvider {
             { cause: error },
           );
         }
-        throw new ProviderError(this.name, "INVALID_RESPONSE", true, response.status, "response is not JSON", { cause: error });
+        throw new ProviderError(
+          this.name,
+          "INVALID_RESPONSE",
+          true,
+          response.status,
+          "response is not JSON",
+          { cause: error },
+        );
       }
       if (!response.ok) {
         const message =
@@ -104,12 +114,19 @@ export class OpenRouterProvider implements ModelProvider {
       }
       const content = payload.choices?.[0]?.message?.content;
       if (typeof content !== "string" || !content.trim()) {
-        throw new ProviderError(this.name, "EMPTY_RESPONSE", true, response.status);
+        throw new ProviderError(
+          this.name,
+          "EMPTY_RESPONSE",
+          true,
+          response.status,
+        );
       }
       return {
         content: content.trim(),
         model:
-          typeof payload.model === "string" ? payload.model : this.options.model,
+          typeof payload.model === "string"
+            ? payload.model
+            : this.options.model,
         usage: {
           promptTokens: tokenCount(payload.usage?.prompt_tokens),
           completionTokens: tokenCount(payload.usage?.completion_tokens),
@@ -119,9 +136,23 @@ export class OpenRouterProvider implements ModelProvider {
     } catch (error) {
       if (error instanceof ProviderError) throw error;
       if (controller.signal.aborted) {
-        throw new ProviderError(this.name, "TIMEOUT", true, null, "request timed out", { cause: error });
+        throw new ProviderError(
+          this.name,
+          "TIMEOUT",
+          true,
+          null,
+          "request timed out",
+          { cause: error },
+        );
       }
-      throw new ProviderError(this.name, "NETWORK_ERROR", true, null, error instanceof Error ? error.message : String(error), { cause: error });
+      throw new ProviderError(
+        this.name,
+        "NETWORK_ERROR",
+        true,
+        null,
+        error instanceof Error ? error.message : String(error),
+        { cause: error },
+      );
     } finally {
       clearTimeout(timeout);
     }
@@ -152,13 +183,14 @@ function demoChapter(number: number) {
 export class MockProvider implements ModelProvider {
   readonly name = "mock";
 
-  async complete(request: CompletionRequest): Promise<ModelResult> {
+  complete(request: CompletionRequest): Promise<ModelResult> {
     let content: string;
     if (request.purpose === "analyze-request") {
       content = JSON.stringify({
         workingTitle: "雾港逆时信",
         genre: "都市悬疑奇幻",
-        premise: "一名档案修复师收到来自明天的照片，为寻找失踪的妹妹卷入一座由钟楼筛选未来的雾城。",
+        premise:
+          "一名档案修复师收到来自明天的照片，为寻找失踪的妹妹卷入一座由钟楼筛选未来的雾城。",
         audience: "成年类型小说读者",
         tone: "克制、潮湿、悬疑感强",
         pointOfView: "third_person_limited",
@@ -171,10 +203,16 @@ export class MockProvider implements ModelProvider {
     } else if (request.purpose === "create-blueprint") {
       content = JSON.stringify({
         title: "雾港逆时信",
-        logline: "档案修复师林澈必须在预言照片成真前找到失踪妹妹，并阻止钟楼删除城市的明天。",
+        logline:
+          "档案修复师林澈必须在预言照片成真前找到失踪妹妹，并阻止钟楼删除城市的明天。",
         theme: "人无法控制所有未来，但可以为选择承担代价。",
-        setting: "常年被海雾覆盖的近现代港城，旧钟楼能从多个可能的未来中保留一个。",
-        styleGuide: ["第三人称限知，紧贴林澈", "以环境细节暗示超自然规则", "对话简短并包含潜台词"],
+        setting:
+          "常年被海雾覆盖的近现代港城，旧钟楼能从多个可能的未来中保留一个。",
+        styleGuide: [
+          "第三人称限知，紧贴林澈",
+          "以环境细节暗示超自然规则",
+          "对话简短并包含潜台词",
+        ],
         characters: [
           {
             id: "linche",
@@ -201,7 +239,11 @@ export class MockProvider implements ModelProvider {
             title: "明日照片",
             purpose: "建立来自未来的照片和失踪妹妹之间的联系。",
             povCharacterId: "linche",
-            beats: ["林澈收到明日照片", "灰衣女人提出警告", "第一把钥匙的谜语出现"],
+            beats: [
+              "林澈收到明日照片",
+              "灰衣女人提出警告",
+              "第一把钥匙的谜语出现",
+            ],
             mustReveal: ["钟楼与异常时间有关"],
             endingHook: "死者尚未死去的房间里藏着第一把钥匙。",
           },
@@ -235,21 +277,33 @@ export class MockProvider implements ModelProvider {
           number === 1
             ? "林澈收到一张来自明天的照片，灰衣女人用妹妹失踪的真相诱导他寻找第一把钥匙。"
             : "林澈找到尚未死亡的周鹤，获得铜钥匙，并得知妹妹警告他不要相信灰衣女人。",
-        newFacts: number === 1 ? ["照片展示可能的未来"] : ["钟楼会筛选未来", "林澈已取得铜钥匙"],
+        newFacts:
+          number === 1
+            ? ["照片展示可能的未来"]
+            : ["钟楼会筛选未来", "林澈已取得铜钥匙"],
         characterStates: [
           {
             characterId: "linche",
             location: number === 1 ? "第七码头" : "白塔公寓",
             physicalState: "无明显外伤",
             emotionalState: "警惕且急于确认妹妹线索",
-            knowledge: number === 1 ? ["钥匙谜语"] : ["灰衣女人可能不可信", "钟楼会筛选未来"],
+            knowledge:
+              number === 1
+                ? ["钥匙谜语"]
+                : ["灰衣女人可能不可信", "钟楼会筛选未来"],
           },
         ],
-        unresolvedThreads: ["妹妹在哪里", "灰衣女人的真实目的", "照片中的死亡如何发生"],
+        unresolvedThreads: [
+          "妹妹在哪里",
+          "灰衣女人的真实目的",
+          "照片中的死亡如何发生",
+        ],
         timelineNotes: [`故事第 ${number} 天`],
       });
     } else if (request.purpose.startsWith("revise-chapter-")) {
-      content = demoChapter(Number(request.purpose.slice("revise-chapter-".length)));
+      content = demoChapter(
+        Number(request.purpose.slice("revise-chapter-".length)),
+      );
     } else if (request.purpose === "route-user-message") {
       const source = request.messages.at(-1)?.content ?? "";
       const parsed = JSON.parse(source) as { message?: string };
@@ -265,14 +319,15 @@ export class MockProvider implements ModelProvider {
               : { type: "feedback", scope: "global", instruction: message };
       content = JSON.stringify({ intent });
     } else if (request.purpose === "answer-user-question") {
-      content = "这是离线 Mock Provider。对话路由已经生效，但真实的作品问答需要配置模型 Provider。";
+      content =
+        "这是离线 Mock Provider。对话路由已经生效，但真实的作品问答需要配置模型 Provider。";
     } else {
       throw new Error(`MOCK_PURPOSE_UNSUPPORTED:${request.purpose}`);
     }
-    return {
+    return Promise.resolve({
       content,
       model: "mock-novel-model",
       usage: { promptTokens: null, completionTokens: null, totalTokens: null },
-    };
+    });
   }
 }

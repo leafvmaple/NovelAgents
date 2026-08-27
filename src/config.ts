@@ -5,7 +5,11 @@ import { CodexProvider } from "./codex-provider.js";
 import { AppError } from "./errors/app-error.js";
 import { locales } from "./i18n/index.js";
 import { promptLocales } from "./prompts/catalog.js";
-import { MockProvider, OpenRouterProvider, type ModelProvider } from "./provider.js";
+import {
+  MockProvider,
+  OpenRouterProvider,
+  type ModelProvider,
+} from "./provider.js";
 
 const ConfigSchema = z
   .object({
@@ -33,15 +37,22 @@ export function loadConfig(forceMock = false) {
     baseUrl: process.env.NOVEL_AGENT_BASE_URL ?? "https://openrouter.ai/api/v1",
     timeoutMs: Number(process.env.NOVEL_AGENT_TIMEOUT_MS ?? 120_000),
     maxRevisions: Number(process.env.NOVEL_AGENT_MAX_REVISIONS ?? 1),
-    maxProviderRetries: Number(process.env.NOVEL_AGENT_MAX_PROVIDER_RETRIES ?? 1),
-    outputRoot: resolve(process.cwd(), process.env.NOVEL_AGENT_OUTPUT_DIR ?? "outputs"),
+    maxProviderRetries: Number(
+      process.env.NOVEL_AGENT_MAX_PROVIDER_RETRIES ?? 1,
+    ),
+    outputRoot: resolve(
+      process.cwd(),
+      process.env.NOVEL_AGENT_OUTPUT_DIR ?? "outputs",
+    ),
     uiLocale: process.env.NOVEL_AGENT_UI_LOCALE ?? "zh-CN",
     promptLocale: process.env.NOVEL_AGENT_PROMPT_LOCALE ?? "zh-CN",
     outputLanguage: process.env.NOVEL_AGENT_OUTPUT_LANGUAGE ?? "zh-CN",
   });
 }
 
-export function createProvider(config: ReturnType<typeof loadConfig>): ModelProvider {
+export function createProvider(
+  config: ReturnType<typeof loadConfig>,
+): ModelProvider {
   if (config.provider === "codex") {
     return new CodexProvider({
       model: config.codexModel,
@@ -49,7 +60,10 @@ export function createProvider(config: ReturnType<typeof loadConfig>): ModelProv
       workingDirectory: process.cwd(),
     });
   }
-  if (config.provider === "mock" || (config.provider === "auto" && !config.apiKey)) {
+  if (
+    config.provider === "mock" ||
+    (config.provider === "auto" && !config.apiKey)
+  ) {
     return new MockProvider();
   }
   if (!config.apiKey) throw new AppError("OPENROUTER_API_KEY_REQUIRED");

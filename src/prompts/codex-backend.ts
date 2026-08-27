@@ -1,9 +1,12 @@
 import type { CompletionRequest } from "../provider.js";
 
 export function codexBackendPrompt(request: CompletionRequest) {
-  const messages = request.messages.map((message, index) =>
-    `<message index="${index}" role="${message.role}">\n${message.content}\n</message>`,
-  ).join("\n\n");
+  const messages = request.messages
+    .map(
+      (message, index) =>
+        `<message index="${index}" role="${message.role}">\n${message.content}\n</message>`,
+    )
+    .join("\n\n");
   return [
     "You are the plain-text model backend for NovelAgents.",
     "Reason and generate only from the messages below. Do not read workspace files, call tools, modify files, or access the network.",
