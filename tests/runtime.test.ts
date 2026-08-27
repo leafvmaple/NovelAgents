@@ -35,3 +35,27 @@ test("interactive runtime generates one chapter at a time and persists feedback"
     await rm(outputRoot, { recursive: true, force: true });
   }
 });
+
+test("run lock serializes concurrent continue operations and reloads fresh state", async () => {
+  const outputRoot = await mkdtemp(join(tmpdir(), "novel-agents-lock-test-"));
+  try {
+    const agent = new NovelAgent(new MockProvider(), {
+      outputRoot,
+      maxRevisions: 1,
+      maxProviderRetries: 0,
+      uiLocale: "zh-CN",
+      promptLocale: "zh-CN",
+      outputLanguage: "zh-CN",
+    });
+    const prepared = await agent.prepare("写一个两章悬疑故事");
+    await Promise.all([
+      agent.runNextChapter(prepared.state, prepared.store),
+      agent.runNextChapter(prepared.state, prepared.store),
+    ]);
+    const persisted = await prepared.store.loadState();
+    assert.deepEqual(persisted.chapters.map((chapter) => chapter.number), [1, 2]);
+    assert.equal(persisted.status, "complete");
+  } finally {
+    await rm(outputRoot, { recursive: true, force: true });
+  }
+});

@@ -258,7 +258,7 @@ export class NovelAgent {
     return { state, store };
   }
 
-  async runNextChapter(initialState: NovelState, store: NovelStore) {
+  private async runNextChapterUnlocked(initialState: NovelState, store: NovelStore) {
     if (!initialState.spec || !initialState.blueprint) throw new AppError("NOVEL_PLAN_REQUIRED");
     if (initialState.status === "complete") return initialState;
     const spec = initialState.spec;
@@ -358,13 +358,21 @@ export class NovelAgent {
     }
   }
 
+  async runNextChapter(initialState: NovelState, store: NovelStore) {
+    return store.withLock(async () => {
+      const latest = await store.loadState();
+      if (latest.id !== initialState.id) throw new Error("RUN_STATE_ID_MISMATCH");
+      return this.runNextChapterUnlocked(latest, store);
+    });
+  }
+
   async execute(initialState: NovelState, store: NovelStore) {
     let state = initialState;
     while (state.status !== "complete") state = await this.runNextChapter(state, store);
     return state;
   }
 
-  async handleUserMessage(initialState: NovelState, store: NovelStore, message: string) {
+  private async handleUserMessageUnlocked(initialState: NovelState, store: NovelStore, message: string) {
     const now = new Date().toISOString();
     const explicit = parseUserCommand(message);
     const intent: UserIntent = explicit ?? await this.callJson(
@@ -383,7 +391,7 @@ export class NovelAgent {
     await store.trace({ type: "state", stage: "user-message", data: { message, intent } });
     let response: string;
     if (intent.type === "continue") {
-      state = await this.runNextChapter(state, store);
+      state = await this.runNextChapterUnlocked(state, store);
       response = state.status === "complete"
         ? `小说已完成，共 ${state.chapters.length} 章。`
         : `第 ${state.chapters.at(-1)?.number} 章已完成。你可以追加要求，或输入 /continue。`;
@@ -425,5 +433,13 @@ export class NovelAgent {
     await store.saveState(state);
     await store.trace({ type: "state", stage: "conversation", data: { intent, response } });
     return { state, response, intent };
+  }
+
+  async handleUserMessage(initialState: NovelState, store: NovelStore, message: string) {
+    return store.withLock(async () => {
+      const latest = await store.loadState();
+      if (latest.id !== initialState.id) throw new Error("RUN_STATE_ID_MISMATCH");
+      return this.handleUserMessageUnlocked(latest, store, message);
+    });
   }
 }

@@ -1,6 +1,24 @@
-import { mkdir, appendFile, readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, appendFile, open, readFile, rename, unlink } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { migrateNovelState, type NovelState } from "./domain.js";
+
+const runLockTails = new Map<string, Promise<void>>();
+
+async function atomicWrite(path: string, content: string) {
+  const temporaryPath = resolve(dirname(path), `.${basename(path)}.${process.pid}.${randomUUID()}.tmp`);
+  const handle = await open(temporaryPath, "wx");
+  try {
+    await handle.writeFile(content, "utf8");
+    await handle.sync();
+    await handle.close();
+    await rename(temporaryPath, path);
+  } catch (error) {
+    await handle.close().catch(() => undefined);
+    await unlink(temporaryPath).catch(() => undefined);
+    throw error;
+  }
+}
 
 function safeName(value: string) {
   const normalized = value
@@ -54,7 +72,29 @@ export class NovelStore {
   }
 
   async saveState(state: NovelState) {
-    await writeFile(this.statePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+    await atomicWrite(this.statePath, `${JSON.stringify(state, null, 2)}\n`);
+  }
+
+  async loadState() {
+    return migrateNovelState(JSON.parse(await readFile(this.statePath, "utf8")));
+  }
+
+  async withLock<T>(operation: () => Promise<T>): Promise<T> {
+    const key = this.directory.toLowerCase();
+    const previous = runLockTails.get(key) ?? Promise.resolve();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolveGate) => {
+      release = resolveGate;
+    });
+    const tail = previous.then(() => gate);
+    runLockTails.set(key, tail);
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (runLockTails.get(key) === tail) runLockTails.delete(key);
+    }
   }
 
   async trace(event: Omit<TraceEvent, "at">) {
@@ -68,6 +108,6 @@ export class NovelStore {
     const chapters = state.chapters
       .map((chapter) => `${chinese ? `## 第${chapter.number}章` : `## Chapter ${chapter.number}`} ${chapter.title}\n\n${chapter.content}`)
       .join("\n\n---\n\n");
-    await writeFile(this.novelPath, `# ${title}\n\n${chapters}\n`, "utf8");
+    await atomicWrite(this.novelPath, `# ${title}\n\n${chapters}\n`);
   }
 }
