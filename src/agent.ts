@@ -6,7 +6,7 @@ import {
   NovelSpecSchema,
   NovelStateSchema,
   StoryBlueprintSchema,
-  UserIntentSchema,
+  UserIntentResultSchema,
   type ChatMessage,
   type ChapterReview,
   type NovelSpec,
@@ -365,21 +365,36 @@ export class NovelAgent {
 
   private async handleUserMessageUnlocked(initialState: NovelState, store: NovelStore, message: string) {
     const now = new Date().toISOString();
-    const explicit = parseUserCommand(message);
-    const intent: UserIntent = explicit ?? await this.callJson(
-      store,
-      "route-user-message",
-      routeUserMessageMessages(initialState, message),
-      UserIntentSchema,
-      { temperature: 0, maxTokens: 500 },
-    );
+    const userMessageId = randomUUID();
     let state = NovelStateSchema.parse({
       ...initialState,
-      conversation: [...initialState.conversation, { id: randomUUID(), role: "user", content: message, intent, createdAt: now }],
+      conversation: [...initialState.conversation, {
+        id: userMessageId,
+        role: "user",
+        content: message,
+        intent: null,
+        createdAt: now,
+      }],
       updatedAt: now,
     });
     await store.saveState(state);
-    await store.trace({ type: "state", stage: "user-message", data: { message, intent } });
+    await store.trace({ type: "state", stage: "user-message-received", data: { messageId: userMessageId } });
+
+    const explicit = parseUserCommand(message);
+    const intent: UserIntent = explicit ?? (await this.callJson(
+      store,
+      "route-user-message",
+      routeUserMessageMessages(state, message),
+      UserIntentResultSchema,
+      { temperature: 0, maxTokens: 500 },
+    )).intent;
+    state = NovelStateSchema.parse({
+      ...state,
+      conversation: state.conversation.map((item) => item.id === userMessageId ? { ...item, intent } : item),
+      updatedAt: new Date().toISOString(),
+    });
+    await store.saveState(state);
+    await store.trace({ type: "state", stage: "user-message-routed", data: { messageId: userMessageId, intent } });
     let response: string;
     if (intent.type === "continue") {
       state = await this.runNextChapterUnlocked(state, store);
@@ -392,19 +407,23 @@ export class NovelAgent {
     } else if (intent.type === "status") {
       response = `状态：${state.status}；已完成 ${state.chapters.length}/${state.blueprint?.chapters.length ?? 0} 章；下一章：${state.currentChapter}。`;
     } else if (intent.type === "feedback") {
-      state = NovelStateSchema.parse({
-        ...state,
-        feedback: [...state.feedback, {
-          id: randomUUID(),
-          scope: intent.scope,
-          instruction: intent.instruction,
-          status: "pending",
-          createdAt: now,
-          appliedToChapter: null,
-        }],
-        updatedAt: now,
-      });
-      response = intent.scope === "global" ? "已记录为后续章节的全局要求。" : "已记录，将应用到下一章。";
+      if (state.status === "complete") {
+        response = "小说已经完成，没有可应用该反馈的后续章节。";
+      } else {
+        state = NovelStateSchema.parse({
+          ...state,
+          feedback: [...state.feedback, {
+            id: randomUUID(),
+            scope: intent.scope,
+            instruction: intent.instruction,
+            status: "pending",
+            createdAt: now,
+            appliedToChapter: null,
+          }],
+          updatedAt: now,
+        });
+        response = intent.scope === "global" ? "已记录为后续章节的全局要求。" : "已记录，将应用到下一章。";
+      }
     } else {
       response = await this.call(
         store,

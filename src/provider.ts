@@ -225,15 +225,16 @@ export class MockProvider implements ModelProvider {
       const source = request.messages.at(-1)?.content ?? "";
       const parsed = JSON.parse(source) as { message?: string };
       const message = parsed.message ?? "";
-      content = /继续|continue/iu.test(message)
-        ? JSON.stringify({ type: "continue" })
+      const intent = /继续|continue/iu.test(message)
+        ? { type: "continue" }
         : /暂停|pause/iu.test(message)
-          ? JSON.stringify({ type: "pause" })
+          ? { type: "pause" }
           : /状态|进度|status/iu.test(message)
-            ? JSON.stringify({ type: "status" })
+            ? { type: "status" }
             : /为什么|什么|哪些|吗|？|\?/u.test(message)
-              ? JSON.stringify({ type: "ask", question: message })
-              : JSON.stringify({ type: "feedback", scope: "global", instruction: message });
+              ? { type: "ask", question: message }
+              : { type: "feedback", scope: "global", instruction: message };
+      content = JSON.stringify({ intent });
     } else if (request.purpose === "answer-user-question") {
       content = "这是离线 Mock Provider。对话路由已经生效，但真实的作品问答需要配置模型 Provider。";
     } else {

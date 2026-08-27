@@ -137,6 +137,8 @@ export const UserIntentSchema = z.discriminatedUnion("type", [
   }).strict(),
 ]);
 
+export const UserIntentResultSchema = z.object({ intent: UserIntentSchema }).strict();
+
 export const ConversationMessageSchema = z.object({
   id: z.string().uuid(),
   role: z.enum(["user", "assistant"]),

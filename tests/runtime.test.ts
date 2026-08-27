@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { NovelAgent } from "../src/agent.js";
 import { MockProvider } from "../src/provider.js";
+import type { ModelProvider } from "../src/provider.js";
 
 test("interactive runtime generates one chapter at a time and persists feedback", async () => {
   const outputRoot = await mkdtemp(join(tmpdir(), "novel-agents-test-"));
@@ -55,6 +56,38 @@ test("run lock serializes concurrent continue operations and reloads fresh state
     const persisted = await prepared.store.loadState();
     assert.deepEqual(persisted.chapters.map((chapter) => chapter.number), [1, 2]);
     assert.equal(persisted.status, "complete");
+  } finally {
+    await rm(outputRoot, { recursive: true, force: true });
+  }
+});
+
+test("persists a natural-language user message before intent routing", async () => {
+  const outputRoot = await mkdtemp(join(tmpdir(), "novel-agents-message-test-"));
+  try {
+    const options = {
+      outputRoot,
+      maxRevisions: 1,
+      maxProviderRetries: 0,
+      uiLocale: "zh-CN" as const,
+      promptLocale: "zh-CN" as const,
+      outputLanguage: "zh-CN",
+    };
+    const preparingAgent = new NovelAgent(new MockProvider(), options);
+    const prepared = await preparingAgent.prepare("写一个两章悬疑故事");
+    const failingProvider: ModelProvider = {
+      name: "failing",
+      async complete() {
+        throw new Error("ROUTER_UNAVAILABLE");
+      },
+    };
+    const routingAgent = new NovelAgent(failingProvider, options);
+    await assert.rejects(
+      routingAgent.handleUserMessage(prepared.state, prepared.store, "下一章节奏慢一点"),
+      /ROUTER_UNAVAILABLE/u,
+    );
+    const persisted = await prepared.store.loadState();
+    assert.equal(persisted.conversation.at(-1)?.content, "下一章节奏慢一点");
+    assert.equal(persisted.conversation.at(-1)?.intent, null);
   } finally {
     await rm(outputRoot, { recursive: true, force: true });
   }

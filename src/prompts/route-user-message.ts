@@ -9,7 +9,7 @@ export function routeUserMessageMessages(state: NovelState, message: string) {
         "continue：用户要求继续生成；pause：暂停；status：询问进度。",
         "feedback：用户提出会影响后续创作的要求；scope 使用 global 或 next_chapter。",
         "ask：用户只是询问作品、计划、角色、伏笔或系统行为，不要求修改。",
-        "JSON 必须直接符合给定 Schema，不要解释。",
+        "返回对象的 intent 字段必须符合给定 Schema，不要解释。",
       ].join("\n"),
     },
     {
