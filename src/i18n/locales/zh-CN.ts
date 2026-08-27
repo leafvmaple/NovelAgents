@@ -25,6 +25,11 @@ export const zhCN = {
     requestQuestion: "请描述你想写的小说（题材、主角、冲突、风格、章节数等，可以只写一句话）：\n> ",
     planSaved: "规划状态已保存：{path}", confirm: "是否按此计划开始生成？[Y/n] ",
     stopped: "已停止。你可以查看 state.json 中的规格和大纲。", failed: "生成失败：{message}",
+    chatHelp: "对话模式：/continue 生成下一章，/pause 暂停，/status 查看进度，/feedback <要求> 添加全局要求，/next <要求> 只影响下一章，/exit 退出。也可以直接使用自然语言。",
+    chatPrompt: "\n你 > ",
+    chatExit: "已退出对话，运行状态已保存。",
+    agentReply: "Agent > {message}",
+    sessionHeading: "会话已结束",
   },
   errors: {
     OPENROUTER_API_KEY_REQUIRED: "使用 OpenRouter 时必须配置 OPENROUTER_API_KEY。",

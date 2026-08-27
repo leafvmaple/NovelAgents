@@ -105,7 +105,36 @@ export const GeneratedChapterSchema = z
   })
   .strict();
 
-export const NovelStateSchema = z
+export const UserIntentSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("continue") }).strict(),
+  z.object({ type: z.literal("pause") }).strict(),
+  z.object({ type: z.literal("status") }).strict(),
+  z.object({ type: z.literal("ask"), question: z.string().trim().min(1).max(2000) }).strict(),
+  z.object({
+    type: z.literal("feedback"),
+    scope: z.enum(["global", "next_chapter"]),
+    instruction: z.string().trim().min(1).max(2000),
+  }).strict(),
+]);
+
+export const ConversationMessageSchema = z.object({
+  id: z.string().uuid(),
+  role: z.enum(["user", "assistant"]),
+  content: z.string().trim().min(1).max(8000),
+  intent: UserIntentSchema.nullable(),
+  createdAt: z.string().datetime(),
+}).strict();
+
+export const UserFeedbackSchema = z.object({
+  id: z.string().uuid(),
+  scope: z.enum(["global", "next_chapter"]),
+  instruction: z.string().trim().min(1).max(2000),
+  status: z.enum(["pending", "applied"]),
+  createdAt: z.string().datetime(),
+  appliedToChapter: z.number().int().positive().nullable(),
+}).strict();
+
+export const NovelStateV1Schema = z
   .object({
     schema: z.literal("novel-agent-state/1.0"),
     id: z.string().uuid(),
@@ -120,12 +149,43 @@ export const NovelStateSchema = z
   })
   .strict();
 
+export const NovelStateSchema = z.object({
+  schema: z.literal("novel-agent-state/2.0"),
+  id: z.string().uuid(),
+  status: z.enum(["planning", "awaiting_confirmation", "writing", "paused", "complete", "failed"]),
+  userRequest: z.string().trim().min(1).max(8000),
+  spec: NovelSpecSchema.nullable(),
+  blueprint: StoryBlueprintSchema.nullable(),
+  chapters: z.array(GeneratedChapterSchema),
+  memories: z.array(ChapterMemorySchema),
+  conversation: z.array(ConversationMessageSchema),
+  feedback: z.array(UserFeedbackSchema),
+  currentChapter: z.number().int().positive(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+}).strict();
+
+export function migrateNovelState(input: unknown) {
+  const current = NovelStateSchema.safeParse(input);
+  if (current.success) return current.data;
+  const legacy = NovelStateV1Schema.parse(input);
+  return NovelStateSchema.parse({
+    ...legacy,
+    schema: "novel-agent-state/2.0",
+    conversation: [],
+    feedback: [],
+    currentChapter: legacy.chapters.length + 1,
+  });
+}
+
 export type NovelSpec = z.infer<typeof NovelSpecSchema>;
 export type StoryBlueprint = z.infer<typeof StoryBlueprintSchema>;
 export type ChapterPlan = z.infer<typeof ChapterPlanSchema>;
 export type ChapterReview = z.infer<typeof ChapterReviewSchema>;
 export type ChapterMemory = z.infer<typeof ChapterMemorySchema>;
 export type NovelState = z.infer<typeof NovelStateSchema>;
+export type UserIntent = z.infer<typeof UserIntentSchema>;
+export type UserFeedback = z.infer<typeof UserFeedbackSchema>;
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant";

@@ -221,6 +221,21 @@ export class MockProvider implements ModelProvider {
       });
     } else if (request.purpose.startsWith("revise-chapter-")) {
       content = demoChapter(Number(request.purpose.slice("revise-chapter-".length)));
+    } else if (request.purpose === "route-user-message") {
+      const source = request.messages.at(-1)?.content ?? "";
+      const parsed = JSON.parse(source) as { message?: string };
+      const message = parsed.message ?? "";
+      content = /继续|continue/iu.test(message)
+        ? JSON.stringify({ type: "continue" })
+        : /暂停|pause/iu.test(message)
+          ? JSON.stringify({ type: "pause" })
+          : /状态|进度|status/iu.test(message)
+            ? JSON.stringify({ type: "status" })
+            : /为什么|什么|哪些|吗|？|\?/u.test(message)
+              ? JSON.stringify({ type: "ask", question: message })
+              : JSON.stringify({ type: "feedback", scope: "global", instruction: message });
+    } else if (request.purpose === "answer-user-question") {
+      content = "这是离线 Mock Provider。对话路由已经生效，但真实的作品问答需要配置模型 Provider。";
     } else {
       throw new Error(`MOCK_PURPOSE_UNSUPPORTED:${request.purpose}`);
     }

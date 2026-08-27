@@ -6,10 +6,12 @@ import {
   NovelSpecSchema,
   NovelStateSchema,
   StoryBlueprintSchema,
+  UserIntentSchema,
   type ChatMessage,
   type ChapterReview,
   type NovelSpec,
   type NovelState,
+  type UserIntent,
 } from "./domain.js";
 import { parseModelJson } from "./json.js";
 import { AppError } from "./errors/app-error.js";
@@ -26,6 +28,8 @@ import {
 } from "./prompts.js";
 import { NovelStore } from "./storage.js";
 import { repairJsonMessages } from "./prompts/repair-json.js";
+import { answerUserQuestionMessages, routeUserMessageMessages } from "./prompts/route-user-message.js";
+import { parseUserCommand } from "./interaction.js";
 
 export type AgentObserver = (message: string) => void;
 
@@ -192,7 +196,7 @@ export class NovelAgent {
   async prepare(userRequest: string) {
     const now = new Date().toISOString();
     let state = NovelStateSchema.parse({
-      schema: "novel-agent-state/1.0",
+      schema: "novel-agent-state/2.0",
       id: randomUUID(),
       status: "planning",
       userRequest,
@@ -200,6 +204,9 @@ export class NovelAgent {
       blueprint: null,
       chapters: [],
       memories: [],
+      conversation: [],
+      feedback: [],
+      currentChapter: 1,
       createdAt: now,
       updatedAt: now,
     });
@@ -251,130 +258,172 @@ export class NovelAgent {
     return { state, store };
   }
 
-  async execute(initialState: NovelState, store: NovelStore) {
-    if (!initialState.spec || !initialState.blueprint) {
-      throw new AppError("NOVEL_PLAN_REQUIRED");
-    }
+  async runNextChapter(initialState: NovelState, store: NovelStore) {
+    if (!initialState.spec || !initialState.blueprint) throw new AppError("NOVEL_PLAN_REQUIRED");
+    if (initialState.status === "complete") return initialState;
     const spec = initialState.spec;
     const blueprint = initialState.blueprint;
+    const chapterPlan = blueprint.chapters.find(
+      (candidate) => !initialState.chapters.some((chapter) => chapter.number === candidate.number),
+    );
+    if (!chapterPlan) return this.transition(store, initialState, "complete");
     let state = await this.transition(store, initialState, "writing");
 
     try {
-      for (const chapterPlan of blueprint.chapters) {
-        if (state.chapters.some((chapter) => chapter.number === chapterPlan.number)) {
-          this.observe(translate(this.options.uiLocale, "agent.chapterAlreadySaved", { chapter: chapterPlan.number }));
-          continue;
-        }
-        this.observe(translate(this.options.uiLocale, "agent.draftingChapter", { chapter: chapterPlan.number, total: blueprint.chapters.length, title: chapterPlan.title }));
-        let content = await this.call(
+      const activeFeedback = state.feedback.filter(
+        (item) => item.scope === "global" || (item.scope === "next_chapter" && item.status === "pending"),
+      );
+      this.observe(translate(this.options.uiLocale, "agent.draftingChapter", {
+        chapter: chapterPlan.number,
+        total: blueprint.chapters.length,
+        title: chapterPlan.title,
+      }));
+      let content = await this.call(
+        store,
+        `draft-chapter-${chapterPlan.number}`,
+        draftChapterMessages({
+          spec,
+          blueprint,
+          chapter: chapterPlan,
+          memories: state.memories,
+          feedback: activeFeedback.map((item) => item.instruction),
+        }),
+        { json: false, temperature: 0.82, maxTokens: Math.min(8000, spec.targetWordsPerChapter * 2) },
+      );
+      let revisionCount = 0;
+      let review = localChapterReview(content, spec, this.options.uiLocale);
+      if (!review) {
+        review = normalizeReview(await this.callJson(
           store,
-          `draft-chapter-${chapterPlan.number}`,
-          draftChapterMessages({ spec, blueprint, chapter: chapterPlan, memories: state.memories }),
-          { json: false, temperature: 0.82, maxTokens: Math.min(8000, spec.targetWordsPerChapter * 2) },
-        );
-        let revisionCount = 0;
-        let review = localChapterReview(content, spec, this.options.uiLocale);
-        if (!review) {
-          review = normalizeReview(
-            await this.callJson(
-              store,
-              `review-chapter-${chapterPlan.number}`,
-              reviewChapterMessages({
-                spec,
-                blueprint,
-                chapter: chapterPlan,
-                memories: state.memories,
-                content,
-              }),
-              ChapterReviewSchema,
-              { temperature: 0.15, maxTokens: 3000 },
-            ),
-          );
-        }
-
-        while (!review.approved && revisionCount < this.options.maxRevisions) {
-          revisionCount += 1;
-          this.observe(translate(this.options.uiLocale, "agent.revisingChapter", { chapter: chapterPlan.number, revision: revisionCount }));
-          content = await this.call(
-            store,
-            `revise-chapter-${chapterPlan.number}`,
-            reviseChapterMessages({
-              spec,
-              blueprint,
-              chapter: chapterPlan,
-              memories: state.memories,
-              original: content,
-              review,
-            }),
-            { json: false, temperature: 0.65, maxTokens: Math.min(8000, spec.targetWordsPerChapter * 2) },
-          );
-          review = localChapterReview(content, spec, this.options.uiLocale);
-          if (!review) {
-            review = normalizeReview(
-              await this.callJson(
-                store,
-                `review-chapter-${chapterPlan.number}-revision-${revisionCount}`,
-                reviewChapterMessages({
-                  spec,
-                  blueprint,
-                  chapter: chapterPlan,
-                  memories: state.memories,
-                  content,
-                }),
-                ChapterReviewSchema,
-                { temperature: 0.1, maxTokens: 3000 },
-              ),
-            );
-          }
-        }
-
-        if (!review.approved) {
-          await store.trace({
-            type: "error",
-            stage: `chapter-${chapterPlan.number}-rejected`,
-            data: { review, revisionCount },
-          });
-          throw new AppError("CHAPTER_REVIEW_REJECTED", { chapter: chapterPlan.number });
-        }
-
-        this.observe(translate(this.options.uiLocale, "agent.recordingMemory", { chapter: chapterPlan.number }));
-        const memory = await this.callJson(
-          store,
-          `memory-chapter-${chapterPlan.number}`,
-          memoryMessages({
-            blueprint,
-            chapter: chapterPlan,
-            previousMemories: state.memories,
-            content,
-          }),
-          ChapterMemorySchema,
-          { temperature: 0.1, maxTokens: 2000 },
-        );
-        state = NovelStateSchema.parse({
-          ...state,
-          chapters: [
-            ...state.chapters,
-            {
-              number: chapterPlan.number,
-              title: chapterPlan.title,
-              content,
-              revisionCount,
-              review,
-            },
-          ],
-          memories: [...state.memories, memory],
-          updatedAt: new Date().toISOString(),
-        });
-        await store.saveState(state);
-        await store.writeNovel(state);
+          `review-chapter-${chapterPlan.number}`,
+          reviewChapterMessages({ spec, blueprint, chapter: chapterPlan, memories: state.memories, content, feedback: activeFeedback.map((item) => item.instruction) }),
+          ChapterReviewSchema,
+          { temperature: 0.15, maxTokens: 3000 },
+        ));
       }
-
-      state = await this.transition(store, state, "complete");
+      while (!review.approved && revisionCount < this.options.maxRevisions) {
+        revisionCount += 1;
+        this.observe(translate(this.options.uiLocale, "agent.revisingChapter", {
+          chapter: chapterPlan.number,
+          revision: revisionCount,
+        }));
+        content = await this.call(
+          store,
+          `revise-chapter-${chapterPlan.number}`,
+          reviseChapterMessages({ spec, blueprint, chapter: chapterPlan, memories: state.memories, original: content, review, feedback: activeFeedback.map((item) => item.instruction) }),
+          { json: false, temperature: 0.65, maxTokens: Math.min(8000, spec.targetWordsPerChapter * 2) },
+        );
+        review = localChapterReview(content, spec, this.options.uiLocale);
+        if (!review) {
+          review = normalizeReview(await this.callJson(
+            store,
+            `review-chapter-${chapterPlan.number}-revision-${revisionCount}`,
+            reviewChapterMessages({ spec, blueprint, chapter: chapterPlan, memories: state.memories, content, feedback: activeFeedback.map((item) => item.instruction) }),
+            ChapterReviewSchema,
+            { temperature: 0.1, maxTokens: 3000 },
+          ));
+        }
+      }
+      if (!review.approved) {
+        await store.trace({ type: "error", stage: `chapter-${chapterPlan.number}-rejected`, data: { review, revisionCount } });
+        throw new AppError("CHAPTER_REVIEW_REJECTED", { chapter: chapterPlan.number });
+      }
+      this.observe(translate(this.options.uiLocale, "agent.recordingMemory", { chapter: chapterPlan.number }));
+      const memory = await this.callJson(
+        store,
+        `memory-chapter-${chapterPlan.number}`,
+        memoryMessages({ blueprint, chapter: chapterPlan, previousMemories: state.memories, content }),
+        ChapterMemorySchema,
+        { temperature: 0.1, maxTokens: 2000 },
+      );
+      const complete = state.chapters.length + 1 >= blueprint.chapters.length;
+      state = NovelStateSchema.parse({
+        ...state,
+        status: complete ? "complete" : "paused",
+        chapters: [...state.chapters, { number: chapterPlan.number, title: chapterPlan.title, content, revisionCount, review }],
+        memories: [...state.memories, memory],
+        feedback: state.feedback.map((item) => item.scope === "next_chapter" && item.status === "pending"
+          ? { ...item, status: "applied" as const, appliedToChapter: chapterPlan.number }
+          : item),
+        currentChapter: chapterPlan.number + 1,
+        updatedAt: new Date().toISOString(),
+      });
+      await store.saveState(state);
+      await store.trace({ type: "state", stage: state.status, data: { status: state.status } });
       await store.writeNovel(state);
       return state;
     } catch (error) {
       await this.transition(store, state, "failed");
       throw error;
     }
+  }
+
+  async execute(initialState: NovelState, store: NovelStore) {
+    let state = initialState;
+    while (state.status !== "complete") state = await this.runNextChapter(state, store);
+    return state;
+  }
+
+  async handleUserMessage(initialState: NovelState, store: NovelStore, message: string) {
+    const now = new Date().toISOString();
+    const explicit = parseUserCommand(message);
+    const intent: UserIntent = explicit ?? await this.callJson(
+      store,
+      "route-user-message",
+      routeUserMessageMessages(initialState, message),
+      UserIntentSchema,
+      { temperature: 0, maxTokens: 500 },
+    );
+    let state = NovelStateSchema.parse({
+      ...initialState,
+      conversation: [...initialState.conversation, { id: randomUUID(), role: "user", content: message, intent, createdAt: now }],
+      updatedAt: now,
+    });
+    await store.saveState(state);
+    await store.trace({ type: "state", stage: "user-message", data: { message, intent } });
+    let response: string;
+    if (intent.type === "continue") {
+      state = await this.runNextChapter(state, store);
+      response = state.status === "complete"
+        ? `小说已完成，共 ${state.chapters.length} 章。`
+        : `第 ${state.chapters.at(-1)?.number} 章已完成。你可以追加要求，或输入 /continue。`;
+    } else if (intent.type === "pause") {
+      state = await this.transition(store, state, "paused");
+      response = "已暂停，状态已经保存。";
+    } else if (intent.type === "status") {
+      response = `状态：${state.status}；已完成 ${state.chapters.length}/${state.blueprint?.chapters.length ?? 0} 章；下一章：${state.currentChapter}。`;
+    } else if (intent.type === "feedback") {
+      state = NovelStateSchema.parse({
+        ...state,
+        status: state.status === "complete" ? "complete" : "paused",
+        feedback: [...state.feedback, {
+          id: randomUUID(),
+          scope: intent.scope,
+          instruction: intent.instruction,
+          status: "pending",
+          createdAt: now,
+          appliedToChapter: null,
+        }],
+        updatedAt: now,
+      });
+      response = intent.scope === "global" ? "已记录为后续章节的全局要求。" : "已记录，将应用到下一章。";
+    } else {
+      response = await this.call(
+        store,
+        "answer-user-question",
+        answerUserQuestionMessages(state, intent.question),
+        { json: false, temperature: 0.2, maxTokens: 1200 },
+      );
+    }
+    state = NovelStateSchema.parse({
+      ...state,
+      conversation: [...state.conversation, {
+        id: randomUUID(), role: "assistant", content: response, intent: null, createdAt: new Date().toISOString(),
+      }],
+      updatedAt: new Date().toISOString(),
+    });
+    await store.saveState(state);
+    await store.trace({ type: "state", stage: "conversation", data: { intent, response } });
+    return { state, response, intent };
   }
 }

@@ -24,6 +24,9 @@ export const enUS = {
     completeHeading: "Generation complete", chapterCount: "Chapters: {count}", novelPath: "Novel: {path}", statePath: "State: {path}", tracePath: "Trace: {path}",
     requestQuestion: "Describe the novel you want (genre, protagonist, conflict, style, chapter count, etc.):\n> ", planSaved: "Plan saved: {path}",
     confirm: "Start generation with this plan? [Y/n] ", stopped: "Stopped. You can inspect the specification and outline in state.json.", failed: "Generation failed: {message}",
+    chatHelp: "Chat mode: /continue generates one chapter, /pause pauses, /status shows progress, /feedback <text> adds a global instruction, /next <text> affects only the next chapter, and /exit exits. Natural language also works.",
+    chatPrompt: "\nYou > ", chatExit: "Chat closed; run state has been saved.", agentReply: "Agent > {message}",
+    sessionHeading: "Session ended",
   },
   errors: {
     OPENROUTER_API_KEY_REQUIRED: "OPENROUTER_API_KEY is required for OpenRouter.", PROVIDER_RETRY_EXHAUSTED: "Provider retries were exhausted.",

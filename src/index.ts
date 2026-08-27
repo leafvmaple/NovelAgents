@@ -5,6 +5,7 @@ import { createProvider, loadConfig } from "./config.js";
 import { AppError } from "./errors/app-error.js";
 import { formatError, translate, type UiLocale } from "./i18n/index.js";
 import { NovelStore } from "./storage.js";
+import type { NovelState } from "./domain.js";
 
 const demoRequest =
   "写一部都市悬疑奇幻短篇：档案修复师收到来自明天的照片，为寻找失踪的妹妹调查一座会筛选未来的钟楼。语言克制、有潮湿的港城氛围，不要依靠巧合解决冲突。";
@@ -27,6 +28,28 @@ function printPlan(state: Awaited<ReturnType<NovelAgent["prepare"]>>["state"], l
   console.log(`\n=== ${t("cli.planHeading")} ===`);
   for (const chapter of state.blueprint.chapters) {
     console.log(`${chapter.number}. ${chapter.title} —— ${chapter.purpose}`);
+  }
+}
+
+async function chatLoop(
+  agent: NovelAgent,
+  initialState: NovelState,
+  store: NovelStore,
+  cli: ReturnType<typeof createInterface>,
+  t: (key: Parameters<typeof translate>[1], params?: Record<string, unknown>) => string,
+) {
+  let state = initialState;
+  console.log(`\n${t("cli.chatHelp")}`);
+  while (true) {
+    const message = (await cli.question(t("cli.chatPrompt"))).trim();
+    if (!message) continue;
+    if (/^\/(?:exit|quit|退出)$/iu.test(message)) {
+      console.log(t("cli.chatExit"));
+      return state;
+    }
+    const result = await agent.handleUserMessage(state, store, message);
+    state = result.state;
+    console.log(t("cli.agentReply", { message: result.response }));
   }
 }
 
@@ -64,8 +87,10 @@ async function main() {
       }
       console.log(`\n${t("cli.resumedFrom", { path: resumed.store.statePath })}`);
       printPlan(resumed.state, config.uiLocale);
-      const completed = await agent.execute(resumed.state, resumed.store);
-      console.log(`\n=== ${t("cli.completeHeading")} ===`);
+      const completed = yes
+        ? await agent.execute(resumed.state, resumed.store)
+        : await chatLoop(agent, resumed.state, resumed.store, cli, t);
+      console.log(`\n=== ${t(completed.status === "complete" ? "cli.completeHeading" : "cli.sessionHeading")} ===`);
       console.log(t("cli.chapterCount", { count: completed.chapters.length }));
       console.log(t("cli.novelPath", { path: resumed.store.novelPath }));
       console.log(t("cli.statePath", { path: resumed.store.statePath }));
@@ -95,8 +120,10 @@ async function main() {
       }
     }
 
-    const completed = await agent.execute(prepared.state, prepared.store);
-    console.log(`\n=== ${t("cli.completeHeading")} ===`);
+    const completed = yes
+      ? await agent.execute(prepared.state, prepared.store)
+      : await chatLoop(agent, prepared.state, prepared.store, cli, t);
+    console.log(`\n=== ${t(completed.status === "complete" ? "cli.completeHeading" : "cli.sessionHeading")} ===`);
     console.log(t("cli.chapterCount", { count: completed.chapters.length }));
     console.log(t("cli.novelPath", { path: prepared.store.novelPath }));
     console.log(t("cli.statePath", { path: prepared.store.statePath }));

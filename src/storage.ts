@@ -1,6 +1,6 @@
 import { mkdir, appendFile, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
-import { NovelStateSchema, type NovelState } from "./domain.js";
+import { migrateNovelState, type NovelState } from "./domain.js";
 
 function safeName(value: string) {
   const normalized = value
@@ -46,8 +46,11 @@ export class NovelStore {
     const statePath = basename(resolvedPath).toLowerCase() === "state.json"
       ? resolvedPath
       : resolve(resolvedPath, "state.json");
-    const state = NovelStateSchema.parse(JSON.parse(await readFile(statePath, "utf8")));
-    return { state, store: new NovelStore(dirname(statePath)) };
+    const raw = JSON.parse(await readFile(statePath, "utf8")) as { schema?: unknown };
+    const state = migrateNovelState(raw);
+    const store = new NovelStore(dirname(statePath));
+    if (raw.schema !== state.schema) await store.saveState(state);
+    return { state, store };
   }
 
   async saveState(state: NovelState) {

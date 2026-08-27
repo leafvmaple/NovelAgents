@@ -85,6 +85,7 @@ export function draftChapterMessages(input: {
   blueprint: StoryBlueprint;
   chapter: ChapterPlan;
   memories: ChapterMemory[];
+  feedback?: string[];
 }) {
   return [
     {
@@ -106,6 +107,7 @@ export function draftChapterMessages(input: {
         `故事圣经：\n${JSON.stringify(input.blueprint, null, 2)}`,
         `本章计划：\n${JSON.stringify(input.chapter, null, 2)}`,
         `连续性记忆：\n${memoryContext(input.memories)}`,
+        `用户追加要求：\n${input.feedback?.length ? input.feedback.join("\n") : "无"}`,
       ].join("\n\n"),
     },
   ];
@@ -117,6 +119,7 @@ export function reviewChapterMessages(input: {
   chapter: ChapterPlan;
   memories: ChapterMemory[];
   content: string;
+  feedback?: string[];
 }) {
   return [
     {
@@ -142,6 +145,7 @@ export function reviewChapterMessages(input: {
         `本章计划：\n${JSON.stringify(input.chapter, null, 2)}`,
         `此前记忆：\n${memoryContext(input.memories)}`,
         `待审正文：\n${input.content}`,
+        `用户追加要求：\n${input.feedback?.length ? input.feedback.join("\n") : "无"}`,
       ].join("\n\n"),
     },
   ];
@@ -154,6 +158,7 @@ export function reviseChapterMessages(input: {
   memories: ChapterMemory[];
   original: string;
   review: ChapterReview;
+  feedback?: string[];
 }) {
   return [
     {
@@ -174,6 +179,7 @@ export function reviseChapterMessages(input: {
         `此前记忆：\n${memoryContext(input.memories)}`,
         `责任编辑意见：\n${JSON.stringify(input.review, null, 2)}`,
         `原稿：\n${input.original}`,
+        `用户追加要求：\n${input.feedback?.length ? input.feedback.join("\n") : "无"}`,
       ].join("\n\n"),
     },
   ];
