@@ -8,6 +8,13 @@ export const zhCN = {
     draftingChapter: "写作 Agent 正在创作第 {chapter}/{total} 章《{title}》……",
     revisingChapter: "审稿 Agent 要求修改第 {chapter} 章，执行第 {revision} 次改稿……",
     recordingMemory: "连续性 Agent 正在记录第 {chapter} 章状态……",
+    novelComplete: "小说已完成，共 {count} 章。",
+    chapterComplete: "第 {chapter} 章已完成。你可以追加要求，或输入 /continue。",
+    paused: "已暂停，状态已经保存。",
+    statusSummary: "状态：{status}；已完成 {completed}/{total} 章；下一章：{next}。",
+    feedbackNoFuture: "小说已经完成，没有可应用该反馈的后续章节。",
+    globalFeedbackSaved: "已记录为后续章节的全局要求。",
+    nextFeedbackSaved: "已记录，将应用到下一章。",
   },
   review: {
     tooShortProblem: "正文只有 {actual} 个字符，低于最低完整章节长度 {minimum}。",

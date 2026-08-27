@@ -92,3 +92,21 @@ test("persists a natural-language user message before intent routing", async () 
     await rm(outputRoot, { recursive: true, force: true });
   }
 });
+
+test("configured output language overrides a provider's proposed specification language", async () => {
+  const outputRoot = await mkdtemp(join(tmpdir(), "novel-agents-language-test-"));
+  try {
+    const agent = new NovelAgent(new MockProvider(), {
+      outputRoot,
+      maxRevisions: 1,
+      maxProviderRetries: 0,
+      uiLocale: "en-US",
+      promptLocale: "en-US",
+      outputLanguage: "ja-JP",
+    });
+    const prepared = await agent.prepare("Write a two-chapter mystery in Japanese");
+    assert.equal(prepared.state.spec?.language, "ja-JP");
+  } finally {
+    await rm(outputRoot, { recursive: true, force: true });
+  }
+});

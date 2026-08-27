@@ -15,8 +15,8 @@ describe("Codex provider prompt", () => {
         { role: "user", content: "user request" },
       ],
     });
-    assert.match(prompt, /不要读取工作区文件/u);
-    assert.match(prompt, /符合输出 Schema 的 JSON/u);
+    assert.match(prompt, /Do not read workspace files/u);
+    assert.match(prompt, /JSON matching the output Schema/u);
     assert.match(prompt, /role="system">\nsystem rule/u);
     assert.match(prompt, /role="user">\nuser request/u);
   });

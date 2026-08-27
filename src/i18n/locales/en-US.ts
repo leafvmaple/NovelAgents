@@ -10,6 +10,13 @@ export const enUS = {
     draftingChapter: "The writing agent is drafting chapter {chapter}/{total}, “{title}”…",
     revisingChapter: "The reviewer requested changes to chapter {chapter}; revision {revision}…",
     recordingMemory: "The continuity agent is recording chapter {chapter}…",
+    novelComplete: "The novel is complete with {count} chapters.",
+    chapterComplete: "Chapter {chapter} is complete. Add an instruction or enter /continue.",
+    paused: "Paused; the run state has been saved.",
+    statusSummary: "Status: {status}; completed {completed}/{total} chapters; next chapter: {next}.",
+    feedbackNoFuture: "The novel is complete, so there is no future chapter to receive this feedback.",
+    globalFeedbackSaved: "Saved as a global instruction for future chapters.",
+    nextFeedbackSaved: "Saved and will be applied to the next chapter.",
   },
   review: {
     tooShortProblem: "The chapter has {actual} characters, below the minimum complete length of {minimum}.",

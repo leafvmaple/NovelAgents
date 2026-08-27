@@ -4,6 +4,7 @@ import { z } from "zod";
 import { CodexProvider } from "./codex-provider.js";
 import { AppError } from "./errors/app-error.js";
 import { locales } from "./i18n/index.js";
+import { promptLocales } from "./prompts/catalog.js";
 import { MockProvider, OpenRouterProvider, type ModelProvider } from "./provider.js";
 
 const ConfigSchema = z
@@ -18,8 +19,8 @@ const ConfigSchema = z
     maxProviderRetries: z.number().int().min(0).max(3),
     outputRoot: z.string().trim().min(1),
     uiLocale: z.enum(locales),
-    promptLocale: z.enum(locales),
-    outputLanguage: z.string().trim().min(1),
+    promptLocale: z.enum(promptLocales),
+    outputLanguage: z.string().trim().min(1).max(40),
   })
   .strict();
 

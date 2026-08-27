@@ -1,16 +1,12 @@
 import type { NovelState } from "../domain.js";
+import { promptCatalog, type PromptLocale } from "./catalog.js";
 
-export function routeUserMessageMessages(state: NovelState, message: string) {
+export function routeUserMessageMessages(state: NovelState, message: string, locale: PromptLocale = "zh-CN") {
+  const text = promptCatalog(locale);
   return [
     {
       role: "system" as const,
-      content: [
-        "你是小说 Agent 的用户意图路由器，只返回 JSON。",
-        "continue：用户要求继续生成；pause：暂停；status：询问进度。",
-        "feedback：用户提出会影响后续创作的要求；scope 使用 global 或 next_chapter。",
-        "ask：用户只是询问作品、计划、角色、伏笔或系统行为，不要求修改。",
-        "返回对象的 intent 字段必须符合给定 Schema，不要解释。",
-      ].join("\n"),
+      content: text.route.join("\n"),
     },
     {
       role: "user" as const,
@@ -24,11 +20,12 @@ export function routeUserMessageMessages(state: NovelState, message: string) {
   ];
 }
 
-export function answerUserQuestionMessages(state: NovelState, question: string) {
+export function answerUserQuestionMessages(state: NovelState, question: string, locale: PromptLocale = "zh-CN") {
+  const text = promptCatalog(locale);
   return [
     {
       role: "system" as const,
-      content: "你是小说项目助手。只根据给定状态简洁回答，不续写正文，不虚构尚未发生的事实。",
+      content: text.answer,
     },
     {
       role: "user" as const,

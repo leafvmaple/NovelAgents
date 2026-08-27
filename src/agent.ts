@@ -33,6 +33,7 @@ import { answerUserQuestionMessages, routeUserMessageMessages } from "./prompts/
 import { parseUserCommand } from "./interaction.js";
 import { reduceRunState, type RunEvent } from "./state-machine.js";
 import type { AgentEvent } from "./events.js";
+import { interpolatePrompt, promptCatalog, type PromptLocale } from "./prompts/catalog.js";
 
 export type AgentObserver = (event: AgentEvent) => void;
 
@@ -41,7 +42,7 @@ type NovelAgentOptions = {
   maxRevisions: number;
   maxProviderRetries: number;
   uiLocale: UiLocale;
-  promptLocale: UiLocale;
+  promptLocale: PromptLocale;
   outputLanguage: string;
 };
 
@@ -59,26 +60,27 @@ export function normalizeReview(review: ChapterReview) {
     approved,
     revisionBrief: approved
       ? ""
-      : (review.revisionBrief || review.issues.map((issue) => issue.suggestion).join("；")).slice(0, 1000),
+      : (review.revisionBrief || review.issues.map((issue) => issue.suggestion).join("; ")).slice(0, 1000),
   });
 }
 
-function localChapterReview(content: string, spec: NovelSpec, locale: UiLocale): ChapterReview | null {
+function localChapterReview(content: string, spec: NovelSpec, locale: PromptLocale): ChapterReview | null {
+  const messages = promptCatalog(locale).localReview;
   const issues: ChapterReview["issues"] = [];
   const minimumLength = Math.max(250, Math.floor(spec.targetWordsPerChapter * 0.5));
   if (content.trim().length < minimumLength) {
     issues.push({
       severity: "blocking",
-      problem: translate(locale, "review.tooShortProblem", { actual: content.trim().length, minimum: minimumLength }),
-      suggestion: translate(locale, "review.tooShortSuggestion", { minimum: minimumLength }),
+      problem: interpolatePrompt(messages.tooShortProblem, { actual: content.trim().length, minimum: minimumLength }),
+      suggestion: interpolatePrompt(messages.tooShortSuggestion, { minimum: minimumLength }),
     });
   }
   const englishTokens = content.match(/\b[A-Za-z]{3,}\b/gu) ?? [];
   if (spec.language.toLowerCase().startsWith("zh") && englishTokens.length >= 3) {
     issues.push({
       severity: "major",
-      problem: translate(locale, "review.foreignWordsProblem", { words: englishTokens.slice(0, 6).join(", ") }),
-      suggestion: translate(locale, "review.foreignWordsSuggestion"),
+      problem: interpolatePrompt(messages.foreignWordsProblem, { words: englishTokens.slice(0, 6).join(", ") }),
+      suggestion: messages.foreignWordsSuggestion,
     });
   }
   if (issues.length === 0) return null;
@@ -181,7 +183,7 @@ export class NovelAgent {
       const repaired = await this.call(
         store,
         `${purpose}-repair`,
-        repairJsonMessages({ originalTaskMessages: messages, validationErrors, originalJson: content }),
+        repairJsonMessages({ originalTaskMessages: messages, validationErrors, originalJson: content }, this.options.promptLocale),
         { json: true, temperature: 0, maxTokens: options.maxTokens, outputSchema },
       );
       return parseModelJson(schema, repaired);
@@ -219,7 +221,7 @@ export class NovelAgent {
     });
 
     await this.emit(null, { type: "progress", code: "analyzing_request", params: {} });
-    const spec = await this.callJson(
+    const analyzedSpec = await this.callJson(
       null,
       "analyze-request",
       analyzeRequestMessages(userRequest, {
@@ -229,6 +231,7 @@ export class NovelAgent {
       NovelSpecSchema,
       { temperature: 0.25, maxTokens: 1600 },
     );
+    const spec = NovelSpecSchema.parse({ ...analyzedSpec, language: this.options.outputLanguage });
     state = NovelStateSchema.parse({ ...state, spec, updatedAt: new Date().toISOString() });
     const store = await NovelStore.create(this.options.outputRoot, state);
     await this.emit(store, { type: "analysis_recorded", provider: this.provider.name, response: spec });
@@ -237,7 +240,7 @@ export class NovelAgent {
     const blueprint = await this.callJson(
       store,
       "create-blueprint",
-      blueprintMessages(spec, userRequest),
+      blueprintMessages(spec, userRequest, this.options.promptLocale),
       StoryBlueprintSchema,
       { temperature: 0.55, maxTokens: 4000 },
     );
@@ -282,16 +285,17 @@ export class NovelAgent {
           chapter: chapterPlan,
           memories: state.memories,
           feedback: activeFeedback.map((item) => item.instruction),
+          promptLocale: this.options.promptLocale,
         }),
         { json: false, temperature: 0.82, maxTokens: Math.min(8000, spec.targetWordsPerChapter * 2) },
       );
       let revisionCount = 0;
-      let review = localChapterReview(content, spec, this.options.uiLocale);
+      let review = localChapterReview(content, spec, this.options.promptLocale);
       if (!review) {
         review = normalizeReview(await this.callJson(
           store,
           `review-chapter-${chapterPlan.number}`,
-          reviewChapterMessages({ spec, blueprint, chapter: chapterPlan, memories: state.memories, content, feedback: activeFeedback.map((item) => item.instruction) }),
+          reviewChapterMessages({ spec, blueprint, chapter: chapterPlan, memories: state.memories, content, feedback: activeFeedback.map((item) => item.instruction), promptLocale: this.options.promptLocale }),
           ChapterReviewSchema,
           { temperature: 0.15, maxTokens: 3000 },
         ));
@@ -304,15 +308,15 @@ export class NovelAgent {
         content = await this.call(
           store,
           `revise-chapter-${chapterPlan.number}`,
-          reviseChapterMessages({ spec, blueprint, chapter: chapterPlan, memories: state.memories, original: content, review, feedback: activeFeedback.map((item) => item.instruction) }),
+          reviseChapterMessages({ spec, blueprint, chapter: chapterPlan, memories: state.memories, original: content, review, feedback: activeFeedback.map((item) => item.instruction), promptLocale: this.options.promptLocale }),
           { json: false, temperature: 0.65, maxTokens: Math.min(8000, spec.targetWordsPerChapter * 2) },
         );
-        review = localChapterReview(content, spec, this.options.uiLocale);
+        review = localChapterReview(content, spec, this.options.promptLocale);
         if (!review) {
           review = normalizeReview(await this.callJson(
             store,
             `review-chapter-${chapterPlan.number}-revision-${revisionCount}`,
-            reviewChapterMessages({ spec, blueprint, chapter: chapterPlan, memories: state.memories, content, feedback: activeFeedback.map((item) => item.instruction) }),
+            reviewChapterMessages({ spec, blueprint, chapter: chapterPlan, memories: state.memories, content, feedback: activeFeedback.map((item) => item.instruction), promptLocale: this.options.promptLocale }),
             ChapterReviewSchema,
             { temperature: 0.1, maxTokens: 3000 },
           ));
@@ -326,7 +330,7 @@ export class NovelAgent {
       const memory = await this.callJson(
         store,
         `memory-chapter-${chapterPlan.number}`,
-        memoryMessages({ blueprint, chapter: chapterPlan, previousMemories: state.memories, content }),
+        memoryMessages({ blueprint, chapter: chapterPlan, previousMemories: state.memories, content, promptLocale: this.options.promptLocale }),
         ChapterMemorySchema,
         { temperature: 0.1, maxTokens: 2000 },
       );
@@ -382,7 +386,7 @@ export class NovelAgent {
     const intent: UserIntent = explicit ?? (await this.callJson(
       store,
       "route-user-message",
-      routeUserMessageMessages(state, message),
+      routeUserMessageMessages(state, message, this.options.promptLocale),
       UserIntentResultSchema,
       { temperature: 0, maxTokens: 500 },
     )).intent;
@@ -397,16 +401,21 @@ export class NovelAgent {
     if (intent.type === "continue") {
       state = await this.runNextChapterUnlocked(state, store);
       response = state.status === "complete"
-        ? `小说已完成，共 ${state.chapters.length} 章。`
-        : `第 ${state.chapters.at(-1)?.number} 章已完成。你可以追加要求，或输入 /continue。`;
+        ? translate(this.options.uiLocale, "agent.novelComplete", { count: state.chapters.length })
+        : translate(this.options.uiLocale, "agent.chapterComplete", { chapter: state.chapters.at(-1)?.number });
     } else if (intent.type === "pause") {
       state = await this.transition(store, state, "user_paused");
-      response = "已暂停，状态已经保存。";
+      response = translate(this.options.uiLocale, "agent.paused");
     } else if (intent.type === "status") {
-      response = `状态：${state.status}；已完成 ${state.chapters.length}/${state.blueprint?.chapters.length ?? 0} 章；下一章：${state.currentChapter}。`;
+      response = translate(this.options.uiLocale, "agent.statusSummary", {
+        status: state.status,
+        completed: state.chapters.length,
+        total: state.blueprint?.chapters.length ?? 0,
+        next: state.currentChapter,
+      });
     } else if (intent.type === "feedback") {
       if (state.status === "complete") {
-        response = "小说已经完成，没有可应用该反馈的后续章节。";
+        response = translate(this.options.uiLocale, "agent.feedbackNoFuture");
       } else {
         state = NovelStateSchema.parse({
           ...state,
@@ -420,13 +429,16 @@ export class NovelAgent {
           }],
           updatedAt: now,
         });
-        response = intent.scope === "global" ? "已记录为后续章节的全局要求。" : "已记录，将应用到下一章。";
+        response = translate(
+          this.options.uiLocale,
+          intent.scope === "global" ? "agent.globalFeedbackSaved" : "agent.nextFeedbackSaved",
+        );
       }
     } else {
       response = await this.call(
         store,
         "answer-user-question",
-        answerUserQuestionMessages(state, intent.question),
+        answerUserQuestionMessages(state, intent.question, this.options.promptLocale),
         { json: false, temperature: 0.2, maxTokens: 1200 },
       );
     }
