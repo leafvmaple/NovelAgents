@@ -1,0 +1,47 @@
+{
+  "version": "2.0.0",
+  "options": {
+    "cwd": "${workspaceFolder}",
+    "env": {
+      "Path": "C:\\Program Files\\nodejs;${env:Path}"
+    }
+  },
+  "tasks": [
+    {
+      "label": "pnpm: install",
+      "type": "shell",
+      "command": "pnpm install --frozen-lockfile",
+      "problemMatcher": []
+    },
+    {
+      "label": "pnpm: build",
+      "type": "shell",
+      "command": "pnpm build",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$tsc"
+    },
+    {
+      "label": "pnpm: typecheck",
+      "type": "shell",
+      "command": "pnpm typecheck",
+      "problemMatcher": "$tsc"
+    },
+    {
+      "label": "pnpm: test",
+      "type": "shell",
+      "command": "pnpm test",
+      "group": "test",
+      "problemMatcher": "$tsc"
+    },
+    {
+      "label": "pnpm: check",
+      "type": "shell",
+      "command": "pnpm check",
+      "dependsOn": "pnpm: install",
+      "problemMatcher": "$tsc"
+    }
+  ]
+}

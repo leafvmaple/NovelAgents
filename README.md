@@ -74,6 +74,15 @@ NOVEL_AGENT_PROVIDER=auto
 
 ## 5. 运行
 
+### VS Code 断点调试
+
+仓库内置了标准的 `.vscode/tasks.json` 和 `.vscode/launch.json`。先在 TypeScript 源码（例如 `src/agent.ts`）行号左侧设置断点，然后打开“运行和调试”并选择：
+
+- `NovelAgents: 交互调试`：读取项目根目录 `.env`，在集成终端中与 Agent 对话。
+- `NovelAgents: 离线 Demo 调试`：不访问网络，适合确认断点和状态机流程。
+
+按 `F5` 时会先执行 `pnpm: build`，生成带 source map 的 JavaScript，再由 Node.js 启动。也可以用 `Ctrl+Shift+B` 单独构建，或从“终端 → 运行任务”执行安装、类型检查、测试和完整检查。
+
 交互模式：
 
 ```powershell

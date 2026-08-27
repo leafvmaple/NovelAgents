@@ -1,0 +1,42 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "NovelAgents: 交互调试",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "program": "${workspaceFolder}/dist/src/index.js",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "pnpm: build",
+      "console": "integratedTerminal",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/**",
+        "!**/node_modules/**"
+      ],
+      "skipFiles": ["<node_internals>/**"],
+      "smartStep": true
+    },
+    {
+      "name": "NovelAgents: 离线 Demo 调试",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "program": "${workspaceFolder}/dist/src/index.js",
+      "args": ["--demo", "--yes"],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "pnpm: build",
+      "console": "integratedTerminal",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/**",
+        "!**/node_modules/**"
+      ],
+      "skipFiles": ["<node_internals>/**"],
+      "smartStep": true
+    }
+  ]
+}

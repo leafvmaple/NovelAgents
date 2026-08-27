@@ -7,7 +7,9 @@ dist/
 outputs/
 coverage/
 .idea/
-.vscode/
+.vscode/*
+!.vscode/tasks.json
+!.vscode/launch.json
 .DS_Store
 *.tsbuildinfo
 *.log
