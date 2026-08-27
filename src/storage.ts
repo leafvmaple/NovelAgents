@@ -8,10 +8,77 @@ import {
   unlink,
 } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
-import { migrateNovelState, type NovelState } from "./domain.js";
+import {
+  migrateNovelState,
+  type ChapterReview,
+  type NovelState,
+  type UserIntent,
+} from "./domain.js";
 import type { AgentEvent, PersistedAgentEvent } from "./events.js";
 
 const runLockTails = new Map<string, Promise<void>>();
+
+export type NovelStoreOptions = { traceContent?: boolean };
+
+function redactIntent(intent: UserIntent): UserIntent {
+  if (intent.type === "ask") return { type: "ask", question: "[redacted]" };
+  if (intent.type === "feedback") {
+    return { ...intent, instruction: "[redacted]" };
+  }
+  return intent;
+}
+
+function redactReview(review: ChapterReview): ChapterReview {
+  return {
+    ...review,
+    strengths: review.strengths.length ? ["[redacted]"] : [],
+    issues: review.issues.map((issue) => ({
+      severity: issue.severity,
+      problem: "[redacted]",
+      suggestion: "[redacted]",
+    })),
+    revisionBrief: review.revisionBrief ? "[redacted]" : "",
+  };
+}
+
+function redactEvent(event: AgentEvent): AgentEvent {
+  if (event.type === "progress" && "title" in event.params) {
+    return { ...event, params: { ...event.params, title: "[redacted]" } };
+  }
+  if (event.type === "model_completed") {
+    return {
+      ...event,
+      request: {
+        ...event.request,
+        messages: event.request.messages.map((message) => ({
+          ...message,
+          content: "[redacted]",
+        })),
+      },
+      response: "[redacted]",
+    };
+  }
+  if (event.type === "analysis_recorded") {
+    return { ...event, response: "[redacted]" };
+  }
+  if (event.type === "model_failed") {
+    return { ...event, error: { ...event.error, message: "[redacted]" } };
+  }
+  if (event.type === "chapter_rejected") {
+    return { ...event, review: redactReview(event.review) };
+  }
+  if (event.type === "user_message_routed") {
+    return { ...event, intent: redactIntent(event.intent) };
+  }
+  if (event.type === "conversation_response") {
+    return {
+      ...event,
+      intent: redactIntent(event.intent),
+      response: "[redacted]",
+    };
+  }
+  return event;
+}
 
 async function atomicWrite(path: string, content: string) {
   const temporaryPath = resolve(
@@ -46,14 +113,21 @@ export class NovelStore {
   readonly tracePath: string;
   readonly novelPath: string;
 
-  private constructor(directory: string) {
+  private constructor(
+    directory: string,
+    private readonly options: NovelStoreOptions = {},
+  ) {
     this.directory = directory;
     this.statePath = resolve(directory, "state.json");
     this.tracePath = resolve(directory, "trace.jsonl");
     this.novelPath = resolve(directory, "novel.md");
   }
 
-  static async create(root: string, state: NovelState) {
+  static async create(
+    root: string,
+    state: NovelState,
+    options: NovelStoreOptions = {},
+  ) {
     const stamp = new Date().toISOString().replaceAll(/[:.]/gu, "-");
     const title = state.spec?.workingTitle ?? "planning";
     const directory = resolve(
@@ -61,12 +135,12 @@ export class NovelStore {
       `${stamp}-${safeName(title)}-${state.id.slice(0, 8)}`,
     );
     await mkdir(directory, { recursive: true });
-    const store = new NovelStore(directory);
+    const store = new NovelStore(directory, options);
     await store.saveState(state);
     return store;
   }
 
-  static async open(path: string) {
+  static async open(path: string, options: NovelStoreOptions = {}) {
     const resolvedPath = resolve(path);
     const statePath =
       basename(resolvedPath).toLowerCase() === "state.json"
@@ -76,7 +150,7 @@ export class NovelStore {
       schema?: unknown;
     };
     const state = migrateNovelState(raw);
-    const store = new NovelStore(dirname(statePath));
+    const store = new NovelStore(dirname(statePath), options);
     if (raw.schema !== state.schema) await store.saveState(state);
     return { state, store };
   }
@@ -110,9 +184,12 @@ export class NovelStore {
   }
 
   async trace(event: AgentEvent) {
+    const persistedEvent = this.options.traceContent
+      ? event
+      : redactEvent(event);
     const value: PersistedAgentEvent = {
       at: new Date().toISOString(),
-      ...event,
+      ...persistedEvent,
     };
     await appendFile(this.tracePath, `${JSON.stringify(value)}\n`, "utf8");
   }

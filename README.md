@@ -15,7 +15,7 @@
   → 输出 Markdown 小说
 ```
 
-调用轨迹会写入 `trace.jsonl`，便于学习 Agent 的真实数据流。需求分析阶段记录输入与返回结果；创建运行目录后，各阶段还会记录完整 Prompt、模型名称、耗时和 Provider 返回的 Token 使用量。
+调用轨迹会写入 `trace.jsonl`，便于学习 Agent 的真实数据流。默认只记录阶段、模型、耗时、Token 使用量等元数据，并将 Prompt、正文和对话替换为 `[redacted]`。仅在本地使用非敏感内容调试时，才设置 `NOVEL_AGENT_TRACE_CONTENT=true` 记录完整内容。
 
 ## 1. 环境要求
 
@@ -49,6 +49,7 @@ NOVEL_AGENT_MAX_PROVIDER_RETRIES=1
 NOVEL_AGENT_UI_LOCALE=zh-CN
 NOVEL_AGENT_PROMPT_LOCALE=zh-CN
 NOVEL_AGENT_OUTPUT_LANGUAGE=zh-CN
+NOVEL_AGENT_TRACE_CONTENT=false
 ```
 
 三个语言设置彼此独立：`UI_LOCALE` 控制终端和错误提示，`PROMPT_LOCALE` 标记模型指令语言，`OUTPUT_LANGUAGE` 强制小说规格采用的输出语言。当前内置 `zh-CN` 和 `en-US` 界面资源；小说输出语言可以填写任意模型可理解的语言标签。

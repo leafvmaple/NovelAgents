@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { NovelAgent } from "./agent.js";
@@ -98,6 +99,7 @@ async function main() {
         uiLocale: config.uiLocale,
         promptLocale: config.promptLocale,
         outputLanguage: config.outputLanguage,
+        traceContent: config.traceContent,
       },
       (event) => {
         const message = formatAgentEvent(config.uiLocale, event);
@@ -106,7 +108,9 @@ async function main() {
     );
     const resumePath = argumentValue("--resume");
     if (resumePath) {
-      const resumed = await NovelStore.open(resumePath);
+      const resumed = await NovelStore.open(resumePath, {
+        traceContent: config.traceContent,
+      });
       if (!resumed.state.spec || !resumed.state.blueprint) {
         throw new AppError("RESUME_PLAN_REQUIRED");
       }

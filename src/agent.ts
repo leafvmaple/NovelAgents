@@ -51,6 +51,7 @@ type NovelAgentOptions = {
   uiLocale: UiLocale;
   promptLocale: PromptLocale;
   outputLanguage: string;
+  traceContent?: boolean;
 };
 
 function isRetryableProviderError(error: unknown) {
@@ -319,7 +320,9 @@ export class NovelAgent {
       spec,
       updatedAt: new Date().toISOString(),
     });
-    const store = await NovelStore.create(this.options.outputRoot, state);
+    const store = await NovelStore.create(this.options.outputRoot, state, {
+      traceContent: this.options.traceContent ?? false,
+    });
     await this.emit(store, {
       type: "analysis_recorded",
       provider: this.provider.name,

@@ -3,7 +3,7 @@
   "options": {
     "cwd": "${workspaceFolder}",
     "env": {
-      "Path": "C:\\Program Files\\nodejs;${env:Path}"
+      "Path": "${env:ProgramFiles}\\nodejs;${env:Path}"
     }
   },
   "tasks": [

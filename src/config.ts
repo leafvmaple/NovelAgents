@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { resolve } from "node:path";
 import { z } from "zod";
 import { CodexProvider } from "./codex-provider.js";
@@ -25,28 +24,31 @@ const ConfigSchema = z
     uiLocale: z.enum(locales),
     promptLocale: z.enum(promptLocales),
     outputLanguage: z.string().trim().min(1).max(40),
+    traceContent: z.boolean(),
   })
   .strict();
 
-export function loadConfig(forceMock = false) {
+export function loadConfig(
+  forceMock = false,
+  env: NodeJS.ProcessEnv = process.env,
+  cwd = process.cwd(),
+) {
   return ConfigSchema.parse({
-    provider: forceMock ? "mock" : (process.env.NOVEL_AGENT_PROVIDER ?? "auto"),
-    apiKey: process.env.OPENROUTER_API_KEY ?? "",
-    model: process.env.NOVEL_AGENT_MODEL ?? "openrouter/free",
-    codexModel: process.env.NOVEL_AGENT_CODEX_MODEL ?? "gpt-5.6-terra",
-    baseUrl: process.env.NOVEL_AGENT_BASE_URL ?? "https://openrouter.ai/api/v1",
-    timeoutMs: Number(process.env.NOVEL_AGENT_TIMEOUT_MS ?? 120_000),
-    maxRevisions: Number(process.env.NOVEL_AGENT_MAX_REVISIONS ?? 1),
-    maxProviderRetries: Number(
-      process.env.NOVEL_AGENT_MAX_PROVIDER_RETRIES ?? 1,
+    provider: forceMock ? "mock" : (env.NOVEL_AGENT_PROVIDER ?? "auto"),
+    apiKey: env.OPENROUTER_API_KEY ?? "",
+    model: env.NOVEL_AGENT_MODEL ?? "openrouter/free",
+    codexModel: env.NOVEL_AGENT_CODEX_MODEL ?? "gpt-5.6-terra",
+    baseUrl: env.NOVEL_AGENT_BASE_URL ?? "https://openrouter.ai/api/v1",
+    timeoutMs: Number(env.NOVEL_AGENT_TIMEOUT_MS ?? 120_000),
+    maxRevisions: Number(env.NOVEL_AGENT_MAX_REVISIONS ?? 1),
+    maxProviderRetries: Number(env.NOVEL_AGENT_MAX_PROVIDER_RETRIES ?? 1),
+    outputRoot: resolve(cwd, env.NOVEL_AGENT_OUTPUT_DIR ?? "outputs"),
+    uiLocale: env.NOVEL_AGENT_UI_LOCALE ?? "zh-CN",
+    promptLocale: env.NOVEL_AGENT_PROMPT_LOCALE ?? "zh-CN",
+    outputLanguage: env.NOVEL_AGENT_OUTPUT_LANGUAGE ?? "zh-CN",
+    traceContent: /^(?:1|true|yes)$/iu.test(
+      env.NOVEL_AGENT_TRACE_CONTENT ?? "false",
     ),
-    outputRoot: resolve(
-      process.cwd(),
-      process.env.NOVEL_AGENT_OUTPUT_DIR ?? "outputs",
-    ),
-    uiLocale: process.env.NOVEL_AGENT_UI_LOCALE ?? "zh-CN",
-    promptLocale: process.env.NOVEL_AGENT_PROMPT_LOCALE ?? "zh-CN",
-    outputLanguage: process.env.NOVEL_AGENT_OUTPUT_LANGUAGE ?? "zh-CN",
   });
 }
 
