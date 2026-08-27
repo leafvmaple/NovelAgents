@@ -33,5 +33,6 @@ export const enUS = {
     BLUEPRINT_CHAPTER_COUNT_MISMATCH: "The blueprint chapter count does not match the specification.", BLUEPRINT_POV_CHARACTER_MISSING: "A chapter references a missing POV character: {characterId}.",
     NOVEL_PLAN_REQUIRED: "A novel specification and blueprint are required before writing.", CHAPTER_REVIEW_REJECTED: "Chapter {chapter} did not pass final review.",
     RESUME_PLAN_REQUIRED: "The resumed state is missing its specification or blueprint.", NOVEL_REQUEST_REQUIRED: "The novel request cannot be empty.",
+    INVALID_STATE_TRANSITION: "The run cannot perform this transition: {from} → {event}.",
   },
 } as const satisfies DeepLocaleShape;

@@ -7,6 +7,7 @@ export const errorCodes = [
   "CHAPTER_REVIEW_REJECTED",
   "RESUME_PLAN_REQUIRED",
   "NOVEL_REQUEST_REQUIRED",
+  "INVALID_STATE_TRANSITION",
 ] as const;
 
 export type ErrorCode = (typeof errorCodes)[number];

@@ -30,6 +30,7 @@ import { NovelStore } from "./storage.js";
 import { repairJsonMessages } from "./prompts/repair-json.js";
 import { answerUserQuestionMessages, routeUserMessageMessages } from "./prompts/route-user-message.js";
 import { parseUserCommand } from "./interaction.js";
+import { reduceRunState, type RunEvent } from "./state-machine.js";
 
 export type AgentObserver = (message: string) => void;
 
@@ -182,14 +183,15 @@ export class NovelAgent {
     }
   }
 
-  private async transition(store: NovelStore, state: NovelState, status: NovelState["status"]) {
-    const next = NovelStateSchema.parse({
-      ...state,
-      status,
-      updatedAt: new Date().toISOString(),
-    });
+  private async transition(
+    store: NovelStore,
+    state: NovelState,
+    event: RunEvent,
+    patch: Partial<Omit<NovelState, "schema" | "id" | "status" | "createdAt">> = {},
+  ) {
+    const next = reduceRunState(state, event, patch);
     await store.saveState(next);
-    await store.trace({ type: "state", stage: status, data: { status } });
+    await store.trace({ type: "state", stage: event, data: { from: state.status, status: next.status } });
     return next;
   }
 
@@ -247,14 +249,7 @@ export class NovelAgent {
         throw new AppError("BLUEPRINT_POV_CHARACTER_MISSING", { characterId: chapter.povCharacterId });
       }
     }
-    state = NovelStateSchema.parse({
-      ...state,
-      blueprint,
-      status: "awaiting_confirmation",
-      updatedAt: new Date().toISOString(),
-    });
-    await store.saveState(state);
-    await store.trace({ type: "state", stage: "awaiting_confirmation", data: { status: state.status } });
+    state = await this.transition(store, state, "plan_ready", { blueprint });
     return { state, store };
   }
 
@@ -266,8 +261,9 @@ export class NovelAgent {
     const chapterPlan = blueprint.chapters.find(
       (candidate) => !initialState.chapters.some((chapter) => chapter.number === candidate.number),
     );
-    if (!chapterPlan) return this.transition(store, initialState, "complete");
-    let state = await this.transition(store, initialState, "writing");
+    if (!chapterPlan) return this.transition(store, initialState, "run_completed");
+    const startEvent = initialState.status === "failed" ? "resume_writing" : "start_writing";
+    let state = await this.transition(store, initialState, startEvent);
 
     try {
       const activeFeedback = state.feedback.filter(
@@ -337,23 +333,18 @@ export class NovelAgent {
         { temperature: 0.1, maxTokens: 2000 },
       );
       const complete = state.chapters.length + 1 >= blueprint.chapters.length;
-      state = NovelStateSchema.parse({
-        ...state,
-        status: complete ? "complete" : "paused",
+      state = await this.transition(store, state, complete ? "run_completed" : "chapter_paused", {
         chapters: [...state.chapters, { number: chapterPlan.number, title: chapterPlan.title, content, revisionCount, review }],
         memories: [...state.memories, memory],
         feedback: state.feedback.map((item) => item.scope === "next_chapter" && item.status === "pending"
           ? { ...item, status: "applied" as const, appliedToChapter: chapterPlan.number }
           : item),
         currentChapter: chapterPlan.number + 1,
-        updatedAt: new Date().toISOString(),
       });
-      await store.saveState(state);
-      await store.trace({ type: "state", stage: state.status, data: { status: state.status } });
       await store.writeNovel(state);
       return state;
     } catch (error) {
-      await this.transition(store, state, "failed");
+      if (state.status !== "complete") await this.transition(store, state, "run_failed");
       throw error;
     }
   }
@@ -396,14 +387,13 @@ export class NovelAgent {
         ? `小说已完成，共 ${state.chapters.length} 章。`
         : `第 ${state.chapters.at(-1)?.number} 章已完成。你可以追加要求，或输入 /continue。`;
     } else if (intent.type === "pause") {
-      state = await this.transition(store, state, "paused");
+      state = await this.transition(store, state, "user_paused");
       response = "已暂停，状态已经保存。";
     } else if (intent.type === "status") {
       response = `状态：${state.status}；已完成 ${state.chapters.length}/${state.blueprint?.chapters.length ?? 0} 章；下一章：${state.currentChapter}。`;
     } else if (intent.type === "feedback") {
       state = NovelStateSchema.parse({
         ...state,
-        status: state.status === "complete" ? "complete" : "paused",
         feedback: [...state.feedback, {
           id: randomUUID(),
           scope: intent.scope,

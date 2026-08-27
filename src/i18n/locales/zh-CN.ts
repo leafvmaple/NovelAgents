@@ -40,5 +40,6 @@ export const zhCN = {
     CHAPTER_REVIEW_REJECTED: "第 {chapter} 章未通过最终审核。",
     RESUME_PLAN_REQUIRED: "恢复的状态中缺少小说规格或大纲。",
     NOVEL_REQUEST_REQUIRED: "小说需求不能为空。",
+    INVALID_STATE_TRANSITION: "运行状态不允许执行该操作：{from} → {event}。",
   },
 } as const;
