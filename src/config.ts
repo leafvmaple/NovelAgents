@@ -25,6 +25,8 @@ const ConfigSchema = z
     promptLocale: z.enum(promptLocales),
     outputLanguage: z.string().trim().min(1).max(40),
     traceContent: z.boolean(),
+    webHost: z.string().trim().min(1),
+    webPort: z.number().int().min(1).max(65_535),
   })
   .strict();
 
@@ -49,6 +51,8 @@ export function loadConfig(
     traceContent: /^(?:1|true|yes)$/iu.test(
       env.NOVEL_AGENT_TRACE_CONTENT ?? "false",
     ),
+    webHost: env.NOVEL_AGENT_WEB_HOST ?? "127.0.0.1",
+    webPort: Number(env.NOVEL_AGENT_WEB_PORT ?? 3210),
   });
 }
 

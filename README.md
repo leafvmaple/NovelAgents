@@ -75,6 +75,18 @@ NOVEL_AGENT_PROVIDER=auto
 
 ## 5. 运行
 
+### 浏览器对话界面
+
+启动本地 Web 工作台：
+
+```powershell
+pnpm web
+```
+
+然后打开 <http://127.0.0.1:3210>。页面可以创建小说运行、查看大纲与已生成章节、通过输入框使用自然语言沟通、逐章继续、查看实时 Agent 事件，以及立即取消正在进行的模型调用。
+
+服务默认只监听回环地址。项目没有提供用户认证，不要把 `NOVEL_AGENT_WEB_HOST` 改为公网地址或直接暴露到互联网。VS Code 中也可以选择 `NovelAgents: Web 调试` 设置 TypeScript 断点。
+
 ### VS Code 断点调试
 
 仓库内置了标准的 `.vscode/tasks.json` 和 `.vscode/launch.json`。先在 TypeScript 源码（例如 `src/agent.ts`）行号左侧设置断点，然后打开“运行和调试”并选择：

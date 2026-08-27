@@ -37,6 +37,20 @@
       ],
       "skipFiles": ["<node_internals>/**"],
       "smartStep": true
+    },
+    {
+      "name": "NovelAgents: Web 调试",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "${env:ProgramFiles}\\nodejs\\node.exe",
+      "program": "${workspaceFolder}/dist/src/web-server.js",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "pnpm: build",
+      "console": "integratedTerminal",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "skipFiles": ["<node_internals>/**"],
+      "smartStep": true
     }
   ]
 }

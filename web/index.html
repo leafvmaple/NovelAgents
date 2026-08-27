@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NovelAgents Studio</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, "Microsoft YaHei", sans-serif;
+        background: #0d1117;
+        color: #e6edf3;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 20% 0%, #183153 0, transparent 32%), #0d1117;
+      }
+      button,
+      textarea,
+      input {
+        font: inherit;
+      }
+      button {
+        border: 1px solid #3d4f64;
+        border-radius: 8px;
+        padding: 9px 14px;
+        background: #1f6feb;
+        color: white;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: #21262d;
+      }
+      button.danger {
+        background: #9e2a2b;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: wait;
+      }
+      textarea,
+      input {
+        width: 100%;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 12px;
+        color: #e6edf3;
+        background: #0d1117;
+      }
+      textarea {
+        min-height: 110px;
+        resize: vertical;
+      }
+      header {
+        padding: 20px 28px;
+        border-bottom: 1px solid #21262d;
+        background: #0d1117cc;
+        backdrop-filter: blur(12px);
+      }
+      header h1 {
+        margin: 0;
+        font-size: 20px;
+      }
+      header p {
+        margin: 5px 0 0;
+        color: #8b949e;
+        font-size: 13px;
+      }
+      main {
+        max-width: 1500px;
+        margin: 0 auto;
+        padding: 22px;
+      }
+      .card {
+        border: 1px solid #30363d;
+        border-radius: 12px;
+        background: #161b22dd;
+        padding: 18px;
+        box-shadow: 0 12px 32px #0004;
+      }
+      .start {
+        max-width: 760px;
+        margin: 10vh auto;
+      }
+      .start h2 {
+        margin-top: 0;
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .row.end {
+        justify-content: flex-end;
+        margin-top: 12px;
+      }
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(250px, 0.8fr) minmax(420px, 1.5fr) minmax(
+            300px,
+            1fr
+          );
+        gap: 16px;
+      }
+      .panel {
+        min-height: 70vh;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .panel h2 {
+        margin: 0 0 12px;
+        font-size: 16px;
+      }
+      .scroll {
+        overflow: auto;
+        min-height: 0;
+      }
+      .muted {
+        color: #8b949e;
+      }
+      .spec {
+        display: grid;
+        gap: 10px;
+        font-size: 14px;
+      }
+      .spec b {
+        color: #79c0ff;
+      }
+      .chapter {
+        padding: 12px 0;
+        border-top: 1px solid #30363d;
+        white-space: pre-wrap;
+        line-height: 1.8;
+      }
+      .chapter h3 {
+        color: #d2a8ff;
+      }
+      .message {
+        margin: 8px 0;
+        padding: 10px 12px;
+        border-radius: 9px;
+        white-space: pre-wrap;
+        line-height: 1.5;
+      }
+      .message.user {
+        background: #1f3a5f;
+        margin-left: 22px;
+      }
+      .message.assistant {
+        background: #21262d;
+        margin-right: 22px;
+      }
+      .event {
+        font:
+          12px/1.45 ui-monospace,
+          Consolas,
+          monospace;
+        padding: 5px 0;
+        color: #8b949e;
+        border-bottom: 1px dashed #30363d;
+      }
+      .chat-form {
+        margin-top: auto;
+        padding-top: 12px;
+        border-top: 1px solid #30363d;
+      }
+      .action-error {
+        min-height: 1.25em;
+        margin: 8px 0 0;
+        color: #ff7b72;
+        font-size: 13px;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 8px;
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        color: #8b949e;
+        font-size: 13px;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #3fb950;
+      }
+      .hidden {
+        display: none !important;
+      }
+      @media (max-width: 1050px) {
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+        .panel {
+          min-height: 360px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>NovelAgents Studio</h1>
+      <p>可观察、可暂停、可对话的小说 Agent 学习工作台</p>
+    </header>
+    <main>
+      <section id="start" class="card start">
+        <h2>创建小说运行</h2>
+        <p class="muted">
+          描述题材、人物、冲突、风格和章节数。创建后可逐章继续并随时追加要求。
+        </p>
+        <textarea
+          id="request"
+          placeholder="例如：写两章赛博朋克悬疑小说，主角是记忆维修师……"
+        ></textarea>
+        <div class="row end">
+          <button id="create">分析需求并生成大纲</button>
+        </div>
+        <p id="start-error" class="muted"></p>
+      </section>
+
+      <section id="workspace" class="workspace hidden">
+        <aside class="card panel">
+          <div class="row" style="justify-content: space-between">
+            <h2>故事计划</h2>
+            <span id="status" class="status"
+              ><i class="dot"></i><span></span
+            ></span>
+          </div>
+          <div id="spec" class="spec scroll"></div>
+        </aside>
+
+        <article class="card panel">
+          <h2>章节正文</h2>
+          <div id="chapters" class="scroll muted">
+            尚未生成章节。点击“继续一章”。
+          </div>
+        </article>
+
+        <aside class="card panel">
+          <h2>与 Agent 沟通</h2>
+          <div id="messages" class="scroll"></div>
+          <form id="chat" class="chat-form">
+            <input
+              id="message"
+              autocomplete="off"
+              placeholder="直接提问或追加创作要求……"
+            />
+            <div class="actions">
+              <button type="submit">发送</button>
+              <button type="button" class="secondary" data-command="/continue">
+                继续一章
+              </button>
+              <button type="button" class="secondary" data-command="/status">
+                查看进度
+              </button>
+              <button type="button" id="cancel" class="danger">立即暂停</button>
+            </div>
+            <p id="action-error" class="action-error" role="status"></p>
+          </form>
+          <h2 style="margin-top: 16px">实时事件</h2>
+          <div id="events" class="scroll" style="max-height: 180px"></div>
+        </aside>
+      </section>
+    </main>
+
+    <script>
+      const $ = (selector) => document.querySelector(selector);
+      let runId = null;
+      let state = null;
+      let eventSource = null;
+
+      const escapeHtml = (value) =>
+        String(value ?? "").replace(
+          /[&<>'"]/g,
+          (char) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              "'": "&#39;",
+              '"': "&quot;",
+            })[char],
+        );
+
+      async function api(path, options = {}) {
+        const response = await fetch(path, {
+          headers: { "Content-Type": "application/json" },
+          ...options,
+        });
+        const payload = await response.json();
+        if (!response.ok)
+          throw new Error(payload.error || `HTTP ${response.status}`);
+        return payload;
+      }
+
+      function renderState(nextState) {
+        state = nextState;
+        const spec = state.spec;
+        const blueprint = state.blueprint;
+        $("#status span").textContent =
+          `${state.status} · ${state.chapters.length}/${blueprint?.chapters.length ?? 0}`;
+        $("#spec").innerHTML =
+          spec && blueprint
+            ? `
+          <div><b>${escapeHtml(blueprint.title)}</b></div>
+          <div>${escapeHtml(blueprint.logline)}</div>
+          <div><b>类型</b> ${escapeHtml(spec.genre)}</div>
+          <div><b>基调</b> ${escapeHtml(spec.tone)}</div>
+          <div><b>章节</b> ${spec.chapterCount} × ${spec.targetWordsPerChapter} 字</div>
+          <div><b>计划</b></div>
+          ${blueprint.chapters.map((chapter) => `<div>${chapter.number}. ${escapeHtml(chapter.title)}<br><span class="muted">${escapeHtml(chapter.purpose)}</span></div>`).join("")}
+        `
+            : "正在规划……";
+        $("#chapters").innerHTML = state.chapters.length
+          ? state.chapters
+              .map(
+                (chapter) => `
+          <section class="chapter"><h3>第 ${chapter.number} 章 ${escapeHtml(chapter.title)}</h3>${escapeHtml(chapter.content)}</section>
+        `,
+              )
+              .join("")
+          : "尚未生成章节。点击“继续一章”。";
+        $("#messages").innerHTML = state.conversation
+          .map(
+            (item) => `
+          <div class="message ${item.role}">${escapeHtml(item.content)}</div>
+        `,
+          )
+          .join("");
+        $("#messages").scrollTop = $("#messages").scrollHeight;
+      }
+
+      const eventLabels = {
+        analyzing_request: "正在分析需求",
+        creating_blueprint: "正在生成故事大纲",
+        drafting_chapter: "正在创作章节",
+        revising_chapter: "正在改稿",
+        recording_memory: "正在更新连续性记忆",
+        provider_retry: "Provider 重试",
+        json_repair: "正在修复结构化输出",
+      };
+
+      function showEvent(event) {
+        const line = document.createElement("div");
+        line.className = "event";
+        line.textContent =
+          event.type === "progress"
+            ? `${eventLabels[event.code] || event.code} ${JSON.stringify(event.params)}`
+            : event.type;
+        $("#events").prepend(line);
+      }
+
+      function connectEvents() {
+        eventSource?.close();
+        eventSource = new EventSource(`/api/runs/${runId}/events`);
+        eventSource.onmessage = ({ data }) => showEvent(JSON.parse(data));
+      }
+
+      function setActionPending(pending) {
+        $("#message").disabled = pending;
+        document
+          .querySelectorAll("#chat button:not(#cancel)")
+          .forEach((button) => (button.disabled = pending));
+      }
+
+      function showActionError(error = null) {
+        $("#action-error").textContent = error?.message ?? "";
+      }
+
+      async function synchronizeState() {
+        if (!runId) return;
+        const result = await api(`/api/runs/${runId}`);
+        renderState(result.state);
+      }
+
+      async function handleActionError(error) {
+        showActionError(error);
+        try {
+          await synchronizeState();
+        } catch {
+          // Keep the original actionable error when state recovery also fails.
+        }
+      }
+
+      async function sendMessage(message) {
+        if (!runId || !message.trim()) return;
+        setActionPending(true);
+        showActionError();
+        try {
+          const result = await api(`/api/runs/${runId}/messages`, {
+            method: "POST",
+            body: JSON.stringify({ message }),
+          });
+          renderState(result.state);
+          return result;
+        } finally {
+          setActionPending(false);
+        }
+      }
+
+      $("#create").addEventListener("click", async () => {
+        const button = $("#create");
+        button.disabled = true;
+        $("#start-error").textContent = "正在分析需求并生成大纲……";
+        try {
+          const result = await api("/api/runs", {
+            method: "POST",
+            body: JSON.stringify({ request: $("#request").value }),
+          });
+          runId = result.state.id;
+          $("#start").classList.add("hidden");
+          $("#workspace").classList.remove("hidden");
+          renderState(result.state);
+          result.events.forEach(showEvent);
+          connectEvents();
+        } catch (error) {
+          $("#start-error").textContent = error.message;
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      $("#chat").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const input = $("#message");
+        const message = input.value;
+        try {
+          await sendMessage(message);
+          input.value = "";
+        } catch (error) {
+          await handleActionError(error);
+        }
+      });
+      document.querySelectorAll("[data-command]").forEach((button) =>
+        button.addEventListener("click", async () => {
+          try {
+            await sendMessage(button.dataset.command);
+          } catch (error) {
+            await handleActionError(error);
+          }
+        }),
+      );
+      $("#cancel").addEventListener("click", async () => {
+        showActionError();
+        try {
+          const result = await api(`/api/runs/${runId}/cancel`, {
+            method: "POST",
+          });
+          showEvent({
+            type: result.cancelled
+              ? "cancellation_requested"
+              : "nothing_to_cancel",
+          });
+        } catch (error) {
+          await handleActionError(error);
+        }
+      });
+    </script>
+  </body>
+</html>
