@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, appendFile, open, readFile, rename, unlink } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { migrateNovelState, type NovelState } from "./domain.js";
+import type { AgentEvent, PersistedAgentEvent } from "./events.js";
 
 const runLockTails = new Map<string, Promise<void>>();
 
@@ -28,13 +29,6 @@ function safeName(value: string) {
     .slice(0, 60);
   return normalized || "novel";
 }
-
-export type TraceEvent = {
-  at: string;
-  type: "state" | "model" | "error";
-  stage: string;
-  data: unknown;
-};
 
 export class NovelStore {
   readonly directory: string;
@@ -97,8 +91,8 @@ export class NovelStore {
     }
   }
 
-  async trace(event: Omit<TraceEvent, "at">) {
-    const value: TraceEvent = { at: new Date().toISOString(), ...event };
+  async trace(event: AgentEvent) {
+    const value: PersistedAgentEvent = { at: new Date().toISOString(), ...event };
     await appendFile(this.tracePath, `${JSON.stringify(value)}\n`, "utf8");
   }
 

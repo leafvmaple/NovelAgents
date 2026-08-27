@@ -32,8 +32,9 @@ import { repairJsonMessages } from "./prompts/repair-json.js";
 import { answerUserQuestionMessages, routeUserMessageMessages } from "./prompts/route-user-message.js";
 import { parseUserCommand } from "./interaction.js";
 import { reduceRunState, type RunEvent } from "./state-machine.js";
+import type { AgentEvent } from "./events.js";
 
-export type AgentObserver = (message: string) => void;
+export type AgentObserver = (event: AgentEvent) => void;
 
 type NovelAgentOptions = {
   outputRoot: string;
@@ -97,6 +98,11 @@ export class NovelAgent {
     private readonly observe: AgentObserver = () => undefined,
   ) {}
 
+  private async emit(store: NovelStore | null, event: AgentEvent) {
+    await store?.trace(event);
+    this.observe(event);
+  }
+
   private async call(
     store: NovelStore | null,
     purpose: string,
@@ -108,37 +114,35 @@ export class NovelAgent {
       const started = Date.now();
       try {
         const result = await this.provider.complete(request);
-        await store?.trace({
-          type: "model",
+        await this.emit(store, {
+          type: "model_completed",
           stage: purpose,
-          data: {
-            provider: this.provider.name,
-            model: result.model,
-            attempt,
-            durationMs: Date.now() - started,
-            usage: result.usage,
-            request,
-            response: result.content,
-          },
+          provider: this.provider.name,
+          model: result.model,
+          attempt,
+          durationMs: Date.now() - started,
+          usage: result.usage,
+          request,
+          response: result.content,
         });
         return result.content;
       } catch (error) {
         const retrying = attempt < this.options.maxProviderRetries && isRetryableProviderError(error);
-        await store?.trace({
-          type: "error",
+        await this.emit(store, {
+          type: "model_failed",
           stage: purpose,
-          data: {
-            attempt,
-            retrying,
-            durationMs: Date.now() - started,
+          attempt,
+          retrying,
+          durationMs: Date.now() - started,
+          error: {
             message: error instanceof Error ? error.message : String(error),
             ...(error instanceof ProviderError
-              ? { providerError: { provider: error.provider, code: error.code, status: error.status } }
+              ? { provider: error.provider, code: error.code, status: error.status }
               : {}),
           },
         });
         if (!retrying) throw error;
-        this.observe(translate(this.options.uiLocale, "agent.providerRetry", { purpose, attempt: attempt + 1 }));
+        await this.emit(store, { type: "progress", code: "provider_retry", params: { purpose, attempt: attempt + 1 } });
       }
     }
     throw new AppError("PROVIDER_RETRY_EXHAUSTED");
@@ -168,11 +172,11 @@ export class NovelAgent {
               message: issue.message,
             }))
           : [{ path: "response", expected: "valid JSON", message: String(error) }];
-      this.observe(translate(this.options.uiLocale, "agent.repairingJson", { purpose }));
-      await store?.trace({
-        type: "error",
+      await this.emit(store, { type: "progress", code: "json_repair", params: { purpose } });
+      await this.emit(store, {
+        type: "model_validation_failed",
         stage: `${purpose}-validation`,
-        data: { validationErrors },
+        validationErrors,
       });
       const repaired = await this.call(
         store,
@@ -192,7 +196,7 @@ export class NovelAgent {
   ) {
     const next = reduceRunState(state, event, patch);
     await store.saveState(next);
-    await store.trace({ type: "state", stage: event, data: { from: state.status, status: next.status } });
+    await this.emit(store, { type: "state_changed", event, from: state.status, status: next.status });
     return next;
   }
 
@@ -214,7 +218,7 @@ export class NovelAgent {
       updatedAt: now,
     });
 
-    this.observe(translate(this.options.uiLocale, "agent.analyzingRequest"));
+    await this.emit(null, { type: "progress", code: "analyzing_request", params: {} });
     const spec = await this.callJson(
       null,
       "analyze-request",
@@ -227,13 +231,9 @@ export class NovelAgent {
     );
     state = NovelStateSchema.parse({ ...state, spec, updatedAt: new Date().toISOString() });
     const store = await NovelStore.create(this.options.outputRoot, state);
-    await store.trace({
-      type: "model",
-      stage: "analyze-request",
-      data: { provider: this.provider.name, recoveredBeforeStoreCreation: true, response: spec },
-    });
+    await this.emit(store, { type: "analysis_recorded", provider: this.provider.name, response: spec });
 
-    this.observe(translate(this.options.uiLocale, "agent.creatingBlueprint"));
+    await this.emit(store, { type: "progress", code: "creating_blueprint", params: {} });
     const blueprint = await this.callJson(
       store,
       "create-blueprint",
@@ -270,11 +270,9 @@ export class NovelAgent {
       const activeFeedback = state.feedback.filter(
         (item) => item.scope === "global" || (item.scope === "next_chapter" && item.status === "pending"),
       );
-      this.observe(translate(this.options.uiLocale, "agent.draftingChapter", {
-        chapter: chapterPlan.number,
-        total: blueprint.chapters.length,
-        title: chapterPlan.title,
-      }));
+      await this.emit(store, { type: "progress", code: "drafting_chapter", params: {
+        chapter: chapterPlan.number, total: blueprint.chapters.length, title: chapterPlan.title,
+      } });
       let content = await this.call(
         store,
         `draft-chapter-${chapterPlan.number}`,
@@ -300,10 +298,9 @@ export class NovelAgent {
       }
       while (!review.approved && revisionCount < this.options.maxRevisions) {
         revisionCount += 1;
-        this.observe(translate(this.options.uiLocale, "agent.revisingChapter", {
-          chapter: chapterPlan.number,
-          revision: revisionCount,
-        }));
+        await this.emit(store, { type: "progress", code: "revising_chapter", params: {
+          chapter: chapterPlan.number, revision: revisionCount,
+        } });
         content = await this.call(
           store,
           `revise-chapter-${chapterPlan.number}`,
@@ -322,10 +319,10 @@ export class NovelAgent {
         }
       }
       if (!review.approved) {
-        await store.trace({ type: "error", stage: `chapter-${chapterPlan.number}-rejected`, data: { review, revisionCount } });
+        await this.emit(store, { type: "chapter_rejected", chapter: chapterPlan.number, review, revisionCount });
         throw new AppError("CHAPTER_REVIEW_REJECTED", { chapter: chapterPlan.number });
       }
-      this.observe(translate(this.options.uiLocale, "agent.recordingMemory", { chapter: chapterPlan.number }));
+      await this.emit(store, { type: "progress", code: "recording_memory", params: { chapter: chapterPlan.number } });
       const memory = await this.callJson(
         store,
         `memory-chapter-${chapterPlan.number}`,
@@ -379,7 +376,7 @@ export class NovelAgent {
       updatedAt: now,
     });
     await store.saveState(state);
-    await store.trace({ type: "state", stage: "user-message-received", data: { messageId: userMessageId } });
+    await this.emit(store, { type: "user_message_received", messageId: userMessageId });
 
     const explicit = parseUserCommand(message);
     const intent: UserIntent = explicit ?? (await this.callJson(
@@ -395,7 +392,7 @@ export class NovelAgent {
       updatedAt: new Date().toISOString(),
     });
     await store.saveState(state);
-    await store.trace({ type: "state", stage: "user-message-routed", data: { messageId: userMessageId, intent } });
+    await this.emit(store, { type: "user_message_routed", messageId: userMessageId, intent });
     let response: string;
     if (intent.type === "continue") {
       state = await this.runNextChapterUnlocked(state, store);
@@ -441,7 +438,7 @@ export class NovelAgent {
       updatedAt: new Date().toISOString(),
     });
     await store.saveState(state);
-    await store.trace({ type: "state", stage: "conversation", data: { intent, response } });
+    await this.emit(store, { type: "conversation_response", intent, response });
     return { state, response, intent };
   }
 

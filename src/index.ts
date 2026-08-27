@@ -3,7 +3,7 @@ import { stdin as input, stdout as output } from "node:process";
 import { NovelAgent } from "./agent.js";
 import { createProvider, loadConfig } from "./config.js";
 import { AppError } from "./errors/app-error.js";
-import { formatError, translate, type UiLocale } from "./i18n/index.js";
+import { formatAgentEvent, formatError, translate, type UiLocale } from "./i18n/index.js";
 import { NovelStore } from "./storage.js";
 import type { NovelState } from "./domain.js";
 
@@ -77,7 +77,10 @@ async function main() {
         promptLocale: config.promptLocale,
         outputLanguage: config.outputLanguage,
       },
-      (message) => console.log(`[Agent] ${message}`),
+      (event) => {
+        const message = formatAgentEvent(config.uiLocale, event);
+        if (message) console.log(`[Agent] ${message}`);
+      },
     );
     const resumePath = argumentValue("--resume");
     if (resumePath) {
